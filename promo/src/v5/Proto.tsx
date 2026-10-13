@@ -172,7 +172,7 @@ export const Reveal: React.FC<{f: number; v: V}> = ({f, v}) => {
       {name && (
         <div style={{position: 'absolute', left: 96, bottom: 110}}>
           <div style={slam(f, 220)}><G size={230}>Agent Notch</G></div>
-          <div style={{marginTop: 26, opacity: span(f, 228, 236), fontFamily: T.body, fontSize: 28, fontWeight: 500, color: P.text}}>Every agent, beside the notch.</div>
+          <div style={{marginTop: 26, opacity: span(f, 228, 236), fontFamily: T.body, fontSize: 28, fontWeight: 500, color: P.text}}>Every agent. Every project. Beside the notch.</div>
         </div>
       )}
       <Flash f={f} at={150} len={6} />

@@ -126,28 +126,23 @@ export const Plan2: React.FC<{f: number}> = ({f}) => {
   );
 };
 
-/* ---------- 12 (870-990): the tower ---------- */
-export const Tower: React.FC<{f: number}> = ({f}) => {
-  const k = 1.9, h = (1084 - 77) * k;
-  const t = span(f, 872, 960, (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2));
-  const fold = span(f, 960, 972);
+/* ---------- 12 (870-990): the swarm, 55 agents in 11 projects, one panel ---------- */
+export const Swarm: React.FC<{f: number}> = ({f}) => {
+  const k = 1.12, x0 = 395, y0 = 0, x1 = 1160, y1 = 1350, h = (y1 - y0) * k;
+  const rise = 1 - travel(clamp01((f - 870) / 8));
+  const t = span(f, 880, 978, (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2));
+  const n = Math.round(55 * span(f, 878, 892, (x) => 1 - Math.pow(1 - x, 3)));
   return (
     <AbsoluteFill style={{background: P.ground, overflow: 'hidden', perspective: 2200}}>
-      <div style={{position: 'absolute', left: 860, top: lerp(160, 1080 - h - 80, t), transform: 'rotateX(10deg) rotateY(-8deg)', transformOrigin: '50% 0'}}>
-        <Snap src="heavy.png" x0={401} y0={77} x1={1159} y1={1084} k={k} style={{position: 'relative'}} />
+      <div style={{position: 'absolute', left: 1000, top: lerp(40, 1080 - h - 40, t) + rise * 1100, transform: 'rotateX(8deg) rotateY(-7deg)', transformOrigin: '50% 0'}}>
+        <Snap dir="snap4" src="swarm.png" x0={x0} y0={y0} x1={x1} y1={y1} k={k} r={0} style={{position: 'relative'}} />
       </div>
-      <AbsoluteFill style={{background: 'linear-gradient(90deg, rgba(11,11,13,1) 0%, rgba(11,11,13,0.95) 38%, rgba(11,11,13,0) 50%)'}} />
-      <div style={{position: 'absolute', left: 80, top: 70}}><Tag color={P.amber}>REQUEST 7 · EVERYTHING ELSE</Tag></div>
-      <Slam f={f} at={878} style={{left: 80, top: 330}}><G size={150}>{'Twelve\nagents.'}</G></Slam>
-      <Slam f={f} at={930} style={{left: 80, top: 650}}><G size={150} color={P.amber}>One glance.</G></Slam>
-      <div style={{position: 'absolute', left: 1100, top: 40, display: 'flex', gap: 12, alignItems: 'center', opacity: span(f, 950, 956)}}>
-        {Array.from({length: 7}, (_, i) => (
-          <div key={i} style={{transform: `translateX(${fold * -i * 46}px)`, opacity: i === 0 ? 1 : 1 - fold}}>
-            <Mark vendor={i % 2 ? 'codex' : 'claude'} size={40} state={i === 2 ? 'waiting' : 'working'} />
-          </div>
-        ))}
-        <span style={{fontFamily: T.mono, fontSize: 40, fontWeight: 700, color: P.text, marginLeft: -270 * fold, opacity: fold}}>+6</span>
-      </div>
+      <AbsoluteFill style={{background: 'linear-gradient(90deg, rgba(11,11,13,1) 0%, rgba(11,11,13,0.95) 46%, rgba(11,11,13,0) 56%)'}} />
+      <div style={{position: 'absolute', left: 80, top: 70}}><Tag color={P.amber}>EVERY AGENT · EVERY PROJECT</Tag></div>
+      <Slam f={f} at={878} style={{left: 80, top: 220}}><G size={150}>{`${n} agents.`}</G></Slam>
+      <Slam f={f} at={902} style={{left: 80, top: 420}}><G size={150}>11 projects.</G></Slam>
+      <Slam f={f} at={930} style={{left: 80, top: 620}}><G size={150} color={P.amber}>One glance.</G></Slam>
+      {f >= 958 && <div style={{position: 'absolute', left: 84, top: 840}}><Small size={30}>39 Claude · 16 Codex · 1 waiting for you</Small></div>}
     </AbsoluteFill>
   );
 };
@@ -172,21 +167,78 @@ export const Wall: React.FC<{f: number}> = ({f}) => {
   );
 };
 
-/* ---------- 14 (1080-1230): done, one click to its window ---------- */
-export const Done: React.FC<{f: number}> = ({f}) => {
-  const at = 1110, click = 1155;
+/* ---------- 14 (1080-1230): Keep awake, close the lid, the night runs, morning is done ---------- */
+const DONE = [['agents-village', 'v6/notch'], ['billing-api', 'invoice-retry'], ['docs-site', 'search-index']];
+export const Night: React.FC<{f: number}> = ({f}) => {
+  const on = 1088, lid = 1100, shut = 1106, dawn = 1128, at = 1128, click = 1170;
+  // A: the header switch, big
+  const hk = 2.6, hx = 232, hy = 380, sx0 = 600, sy0 = 78;
+  const knob = {x: hx + (1105 - sx0) * hk, y: hy + (122 - sy0) * hk};
+  const cp = span(f, 1080, on - 3);
+  const hcur = {x: lerp(1650, knob.x, cp), y: lerp(980, knob.y + 10, cp)};
+  const hpress = clack(f, on);
+  const close = span(f, lid, shut, (t) => t * t);
+  // C: the night, 23:40 to 07:12
+  const mins = 23 * 60 + 40 + Math.round(452 * span(f, shut, dawn - 2, (t) => t * t * (3 - 2 * t)));
+  const clock = `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+  const doneN = Math.floor(11 * span(f, shut + 4, dawn - 2));
+  // D: morning, as before
   const zoom = span(f, click + 2, click + 22, (t) => t * t * t);
   const k = 1920 / 3024;
-  const cp = span(f, 1128, click - 4);
-  const cur = {x: lerp(1500, 1050, cp), y: lerp(800, 200, cp)};
+  const dp = span(f, 1146, click - 4);
+  const cur = {x: lerp(1500, 1050, dp), y: lerp(800, 200, dp)};
   const press = clack(f, click);
   const win = span(f, click + 14, click + 24);
-  const push = lerp(1.25, 1.4, span(f, 1080, click, (t) => t));
+  const push = lerp(1.25, 1.4, span(f, dawn, click, (t) => t));
+  if (f < shut) {
+    return (
+      <AbsoluteFill style={{background: P.ground, overflow: 'hidden'}}>
+        <div style={{position: 'absolute', left: hx, top: hy}}>
+          <Snap dir={f >= on ? 'snap4/awake' : 'snap4'} src="one.png" x0={sx0} y0={sy0} x1={1160} y1={200} k={hk} r={0} style={{position: 'relative'}} />
+        </div>
+        <div style={{position: 'absolute', left: hx, top: 70}}><Tag color={P.amber}>NEW · KEEP AWAKE</Tag></div>
+        <Slam f={f} at={on + 1} style={{left: hx, top: 130}}><G size={170} color={P.amber}>Keep awake.</G></Slam>
+        {f >= on + 4 && f < lid && <div style={{position: 'absolute', left: hx + 4, top: hy + 360}}><Small size={30}>The Mac stays on with the lid closed. Until you switch it off.</Small></div>}
+        {f < on + 8 && <Pointer x={hcur.x} y={hcur.y} press={hpress} size={64} />}
+        <Flash f={f} at={on} color={P.amber} len={4} peak={0.35} />
+        {f >= lid && (
+          <div style={{position: 'absolute', left: 0, right: 0, top: 0, height: 1080 * close, background: '#000', boxShadow: '0 30px 60px rgba(0,0,0,0.9)'}}>
+            <div style={{position: 'absolute', left: 0, right: 0, bottom: 0, height: 6, background: '#2a2a2e'}} />
+          </div>
+        )}
+        <Slam f={f} at={lid + 1} style={{left: hx, top: 760}}><G size={130}>Close the lid.</G></Slam>
+      </AbsoluteFill>
+    );
+  }
+  if (f < dawn) {
+    return (
+      <AbsoluteFill style={{background: 'radial-gradient(ellipse at 30% 40%, #0E1530 0%, #04060D 70%)', overflow: 'hidden'}}>
+        <div style={{position: 'absolute', left: 96, top: 230}}>
+          <G size={300} mono>{clock}</G>
+        </div>
+        <div style={{position: 'absolute', left: 104, top: 600, display: 'flex', gap: 26}}>
+          {Array.from({length: 11}, (_, i) => <Mark key={i} vendor={i % 3 === 2 ? 'codex' : 'claude'} size={54} state={i < doneN ? 'done' : 'working'} />)}
+        </div>
+        <Slam f={f} at={shut + 2} style={{left: 96, top: 720}}><G size={120}>They keep working.</G></Slam>
+        <Dramatisation />
+      </AbsoluteFill>
+    );
+  }
   return (
     <AbsoluteFill style={{background: '#000', overflow: 'hidden'}}>
       <div style={{position: 'absolute', inset: 0, transformOrigin: '960px 130px', transform: `scale(${push * (1 + zoom * 6)})`, opacity: 1 - win}}>
         <Img src={staticFile('blender/desktop.png')} style={{position: 'absolute', width: 3024 * k, height: 1964 * k, top: -60}} />
         <AbsoluteFill style={{background: 'rgba(0,0,0,0.45)'}} />
+        {DONE.map(([p, b], i) => {
+          const t = span(f, at + 4 + i * 4, at + 12 + i * 4, (x) => 1 - Math.pow(1 - x, 3));
+          return (
+            <div key={p} style={{position: 'absolute', left: 960 - 364, top: 196 + i * 72, width: 728, boxSizing: 'border-box', padding: '12px 24px', borderRadius: 18, background: '#1c1c1c', border: '2px solid #3b3b3b',
+              display: 'flex', alignItems: 'center', gap: 12, opacity: t * (1 - zoom), transform: `translateY(${(1 - t) * -30}px)`, fontFamily: T.body, fontSize: 22, color: P.text}}>
+              <Mark vendor={i === 2 ? 'codex' : 'claude'} size={16} state="done" />
+              <span style={{fontWeight: 600}}>{p}</span><span style={{color: P.dim}}>{b} · done</span>
+            </div>
+          );
+        })}
         <div style={{position: 'absolute', inset: 0, transform: `scale(${press})`, transformOrigin: '960px 110px'}}>
           <Toast f={f} at={at} x={960} y={30} />
         </div>
@@ -197,9 +249,12 @@ export const Done: React.FC<{f: number}> = ({f}) => {
             lines={[{t: '✓ 14 passed', c: P.green}, {t: '● git commit -m "Compress video uploads to 720p"', c: P.dim}, {t: '[fix/upload-compress 4f9c2e1]', c: P.text}, {t: ' 4 files changed, 212 insertions(+), 31 deletions(-)', c: P.dim}, {t: '> ', c: P.text}]} />
         </div>
       )}
-      {f >= 1128 && f < click + 6 && <Pointer x={cur.x} y={cur.y} press={press} size={64} />}
-      <Slam f={f} at={at} to={click + 14} style={{left: 80, top: 700}}><G size={300} color={P.green}>Done.</G></Slam>
+      {f >= 1146 && f < click + 6 && <Pointer x={cur.x} y={cur.y} press={press} size={64} />}
+      <AbsoluteFill style={{background: 'linear-gradient(20deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 30%, rgba(0,0,0,0) 55%)', opacity: 1 - win}} />
+      <Slam f={f} at={dawn} to={click + 14} style={{left: 80, top: 620}}><G size={170} color={P.green}>{'07:12.\nWake up to done.'}</G></Slam>
+      {f >= dawn + 10 && f < click + 14 && <div style={{position: 'absolute', left: 84, top: 990}}><Small size={28}>Anything that needs your answer waits for you.</Small></div>}
       <Slam f={f} at={click + 18} style={{left: 120, top: 90}}><G size={110}>One click to its window.</G></Slam>
+      <Flash f={f} at={dawn} color="#FFE6B0" len={6} peak={0.7} />
       <Flash f={f} at={click + 14} len={4} peak={0.5} />
     </AbsoluteFill>
   );

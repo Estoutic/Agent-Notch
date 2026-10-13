@@ -20,9 +20,9 @@ const Req: React.FC<{f: number; at: number; n: string}> = ({f, at, n}) => (
 );
 
 /** A crop of a 3x snapshot (1.5 px per stage px), shown at k film px per stage px. */
-export const Snap: React.FC<{src: string; x0: number; y0: number; x1: number; y1: number; k: number; r?: number; style?: React.CSSProperties; children?: React.ReactNode}> = ({src, x0, y0, x1, y1, k, r = 24, style, children}) => (
+export const Snap: React.FC<{src: string; x0: number; y0: number; x1: number; y1: number; k: number; r?: number; dir?: string; style?: React.CSSProperties; children?: React.ReactNode}> = ({src, x0, y0, x1, y1, k, r = 24, dir = 'snap3', style, children}) => (
   <div style={{position: 'absolute', width: (x1 - x0) * k, height: (y1 - y0) * k, overflow: 'hidden', borderRadius: r * k, boxShadow: '0 40px 90px rgba(0,0,0,0.65)', ...style}}>
-    <Img src={staticFile(`snap3/${src}`)} style={{position: 'absolute', left: -x0 * k, top: -y0 * k, width: 1920 * (k / 1.5)}} />
+    <Img src={staticFile(`${dir}/${src}`)} style={{position: 'absolute', left: -x0 * k, top: -y0 * k, width: 1920 * (k / 1.5)}} />
     {children}
   </div>
 );

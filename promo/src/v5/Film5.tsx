@@ -6,7 +6,7 @@ import {CameraMotionBlur} from '@remotion/motion-blur';
 import {loadFonts} from '../fonts';
 import {Dramatisation, P} from './common';
 import {Ask, Drop, Hook, Hud, Keys, Reveal, V, shakeFrom} from './Proto';
-import {Ask2, Done, End, Fixed, Listen, Plan2, Risky, Themes, Tower, Wall, Yours, Zero} from './Punch';
+import {Ask2, End, Fixed, Listen, Night, Plan2, Risky, Swarm, Themes, Wall, Yours, Zero} from './Punch';
 
 loadFonts();
 
@@ -24,9 +24,9 @@ const SCENES: Scene[] = [
   {from: 630, to: 690, C: Yours},
   {from: 690, to: 780, C: Ask2},
   {from: 780, to: 870, C: Plan2},
-  {from: 870, to: 990, C: Tower},
+  {from: 870, to: 990, C: Swarm},
   {from: 990, to: 1080, C: Wall},
-  {from: 1080, to: 1230, C: Done},
+  {from: 1080, to: 1230, C: Night},
   {from: 1230, to: 1290, C: Fixed},
   {from: 1290, to: 1485, C: Themes},
   {from: 1485, to: 1575, C: Listen},
@@ -40,14 +40,14 @@ export const HITS = [
   {f: 150, a: 26}, {f: 160, a: 10}, {f: 175, a: 10}, {f: 190, a: 14}, {f: 205, a: 10}, {f: 220, a: 16},
   {f: 390, a: 34}, {f: 420, a: 10}, {f: 450, a: 22}, {f: 462, a: 10}, {f: 480, a: 22}, {f: 492, a: 12},
   {f: 510, a: 16}, {f: 540, a: 12}, {f: 579, a: 22}, {f: 627, a: 18}, {f: 640, a: 26},
-  {f: 690, a: 10}, {f: 750, a: 14}, {f: 790, a: 10}, {f: 840, a: 16}, {f: 878, a: 14}, {f: 930, a: 16},
-  {f: 990, a: 10}, {f: 1000, a: 12}, {f: 1030, a: 12}, {f: 1110, a: 18}, {f: 1155, a: 12}, {f: 1169, a: 16},
+  {f: 690, a: 10}, {f: 750, a: 14}, {f: 790, a: 10}, {f: 840, a: 16}, {f: 878, a: 14}, {f: 902, a: 14}, {f: 930, a: 16},
+  {f: 990, a: 10}, {f: 1000, a: 12}, {f: 1030, a: 12}, {f: 1088, a: 12}, {f: 1106, a: 30}, {f: 1128, a: 20}, {f: 1170, a: 12}, {f: 1184, a: 16},
   {f: 1248, a: 10}, {f: 1268, a: 26}, {f: 1290, a: 30}, {f: 1470, a: 14},
   {f: 1486, a: 12}, {f: 1493, a: 12}, {f: 1500, a: 14}, {f: 1515, a: 14}, {f: 1530, a: 14}, {f: 1545, a: 16}, {f: 1560, a: 10},
   {f: 1590, a: 18}, {f: 1650, a: 34},
 ];
 /** Frames that get camera motion blur: crash zooms, whips, the zoom through the toast. */
-const BLUR = [[22, 27], [30, 35], [37, 42], [270, 290], [420, 426], [462, 469], [780, 790], [1157, 1170]];
+const BLUR = [[22, 27], [30, 35], [37, 42], [270, 290], [420, 426], [462, 469], [780, 790], [870, 878], [1172, 1185]];
 
 const Frame: React.FC = () => {
   const f = useCurrentFrame();

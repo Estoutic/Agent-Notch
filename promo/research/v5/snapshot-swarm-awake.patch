@@ -1,0 +1,80 @@
+diff --git a/Sources/AgentsNotch/KeepAwakeModel.swift b/Sources/AgentsNotch/KeepAwakeModel.swift
+index ab8ef91..1b2e26c 100644
+--- a/Sources/AgentsNotch/KeepAwakeModel.swift
++++ b/Sources/AgentsNotch/KeepAwakeModel.swift
+@@ -45,7 +45,12 @@ final class KeepAwakeModel: ObservableObject {
+         }
+     }
+ 
++    /// Snapshot-only: shows the switch in a given state without touching the Mac's sleep setting.
++    func showForSnapshot(_ on: Bool) { enabled = on; snapshotLocked = true }
++    private var snapshotLocked = false
++
+     func refresh() {
++        if snapshotLocked { return }
+         guard !busy else { return }
+         enabled = try? system.read()
+         permissionInstalled = system.permissionInstalled
+diff --git a/Sources/AgentsNotch/Snapshot.swift b/Sources/AgentsNotch/Snapshot.swift
+index 3cf58cd..6cfab0f 100644
+--- a/Sources/AgentsNotch/Snapshot.swift
++++ b/Sources/AgentsNotch/Snapshot.swift
+@@ -13,6 +13,8 @@ enum Snapshot {
+         let settings = AppSettings(defaults: defaults)
+         let url = URL(fileURLWithPath: dir, isDirectory: true)
+         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
++        let awake = ProcessInfo.processInfo.environment["AGENT_NOTCH_SNAPSHOT_AWAKE"]
++        if let awake { KeepAwakeModel.shared.showForSnapshot(awake == "1") }
+         for name in Fixtures.names {
+             for cramped in [false, true] where !cramped || name == "heavy" {
+                 let store = Store(settings: settings)
+@@ -175,7 +177,7 @@ enum Snapshot {
+ 
+     @discardableResult private static func write<V: View>(_ scene: V, to url: URL) -> Bool {
+         let renderer = ImageRenderer(content: scene)
+-        renderer.scale = 2
++        renderer.scale = Double(ProcessInfo.processInfo.environment["AGENT_NOTCH_SNAPSHOT_SCALE"] ?? "").flatMap { $0 > 0 ? $0 : nil } ?? 2
+         guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return false }
+         do { try png.write(to: url); return true }
+diff --git a/Sources/NotchCore/Fixtures.swift b/Sources/NotchCore/Fixtures.swift
+index 068d8fb..719adf9 100644
+--- a/Sources/NotchCore/Fixtures.swift
++++ b/Sources/NotchCore/Fixtures.swift
+@@ -2,7 +2,7 @@ import Foundation
+ 
+ /// Made-up scenes for `--fixture <name>`: screenshots and checks without live agents.
+ public enum Fixtures {
+-    public static let names = ["one", "sub", "multi", "projects", "heavy", "ask", "question", "plan"]
++    public static let names = ["one", "sub", "multi", "projects", "heavy", "ask", "question", "plan", "swarm"]
+ 
+     public static func agents(_ name: String) -> [Agent]? {
+         var n = 0
+@@ -57,6 +57,27 @@ public enum Fixtures {
+                     a(.codex, "gpt-6-luna", .low, "worker · scan", .done, parent: "fx-17"),
+                     a(.claude, "opus", .xhigh, "v6/notch", .working, "agents-village"),
+                     a(.codex, "gpt-6-astra", .high, "release-notes", .error, "hexhaven")]
++        case "swarm":
++            // The film's "absurd" scene: 11 projects, 64 agents, one of them waiting on you.
++            let projects = ["wedding-app", "agents-village", "hexhaven", "hexhaven-kit", "agenttrack", "stickers",
++                            "billing-api", "mobile-shell", "docs-site", "infra", "design-system"]
++            let leads = ["fix/upload-compress", "v6/notch", "release-notes", "map-editor", "ingest-v2", "pack-07",
++                         "invoice-retry", "push-tokens", "search-index", "k8s-upgrade", "tokens-v3"]
++            let subs: [(Vendor, String, Effort, String)] = [
++                (.claude, "haiku", .low, "Explore"), (.claude, "sonnet", .medium, "test-writer"),
++                (.codex, "gpt-6.1-sol", .medium, "codex-job · api"), (.claude, "opus", .high, "code-reviewer"),
++                (.codex, "gpt-6-luna", .low, "worker · lint"), (.claude, "sonnet", .medium, "browser-verifier")]
++            var list: [Agent] = []
++            for (i, p) in projects.enumerated() {
++                let lead = a(i % 3 == 2 ? .codex : .claude, i % 3 == 2 ? "gpt-6.1-sol" : "opus", .high, leads[i],
++                             i == 0 ? .waiting : .working, p, ask: i == 0 ? "pnpm test upload" : nil)
++                list.append(lead)
++                for k in 0..<(i < 9 ? 5 : 4) {
++                    let s = subs[(i + k) % subs.count]
++                    list.append(a(s.0, s.1, s.2, s.3, (i + k) % 7 == 3 ? .done : .working, p, parent: lead.id))
++                }
++            }
++            return list
+         case "ask", "question", "plan":
+             return [a(.claude, "opus", .high, "fix/upload-compress", .working),
+                     a(.claude, "haiku", .low, "Explore · " + Loc.t("routes", "роуты"), .working, parent: "fx-1"),
