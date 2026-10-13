@@ -33,15 +33,16 @@ export const SORT_AT = 24;
 const pad = (v: string, n: number) => v.padEnd(n, ' ');
 
 /** Position of row r in the list at frame f: PID order, then BLOCKED order from SORT_AT. */
-const slot = (r: number, f: number) => {
+const slot = (r: number, f: number, at = SORT_AT, snap = 9) => {
   const sorted = r === HERO ? 0 : r < HERO ? r + 1 : r;
-  return lerp(r, sorted, span(f, SORT_AT, SORT_AT + 9));
+  return lerp(r, sorted, span(f, at, at + snap));
 };
 
-const youCell = () => ({x: X0 + COLS[4] * CH + CH * 1.5, y: Y0 + LINE / 2});
+export const youCell = () => ({x: X0 + COLS[4] * CH + CH * 1.5, y: Y0 + LINE / 2});
 
-export const TopList: React.FC<{f: number; done?: boolean}> = ({f, done}) => {
-  const lit = done ? 0 : span(f, SORT_AT + 4, SORT_AT + 10);
+export const TopList: React.FC<{f: number; done?: boolean; sortAt?: number; snap?: number}> = ({f, done, sortAt = SORT_AT, snap = 9}) => {
+  const SORT_AT = sortAt;
+  const lit = done ? 0 : span(f, SORT_AT + Math.min(4, snap / 2), SORT_AT + Math.min(10, snap + 1));
   const header = done
     ? 'agents — 13 processes · 12 running · 0 blocked'
     : 'agents — 13 processes · 12 running · 1 blocked';
@@ -59,7 +60,7 @@ export const TopList: React.FC<{f: number; done?: boolean}> = ({f, done}) => {
         {pad('PID', 7) + pad('AGENT', 31) + pad('STATE', 10) + pad('BLOCKED', 9) + 'WAITING ON'}
       </div>
       {ROWS.map((row, r) => {
-        const y = Y0 + slot(r, f) * LINE;
+        const y = Y0 + slot(r, f, SORT_AT, snap) * LINE;
         const hero = r === HERO;
         const churn = Math.floor(random(`b${r}-${Math.floor(f / 6)}`) * 4);
         const state = hero ? (done ? 'DONE' : 'BLOCKED') : 'running';
