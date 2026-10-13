@@ -148,7 +148,7 @@ export const End: React.FC = () => {
   const url = range(f, ev.url, ev.url + 10, expoOut);
   const out = range(f, len - 8, len);
   const hit = f >= ev.hit ? Math.exp(-(f - ev.hit) / 5) : 0;
-  const textTop = V ? 1000 : 610;
+  const textTop = blender ? (V ? 300 : 80) : V ? 1000 : 610;
   return (
     <AbsoluteFill style={{background: '#000'}}>
       {blender ? (
@@ -162,8 +162,8 @@ export const End: React.FC = () => {
           </World>
         </Blur>
       )}
-      <AbsoluteFill style={{background: blender ? 'linear-gradient(transparent 40%, rgba(0,0,0,0.85) 62%)' : undefined}} />
-      <div style={{position: 'absolute', left: 0, right: 0, top: textTop, display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: 1 - out}}>
+      <AbsoluteFill style={{background: blender ? 'linear-gradient(rgba(0,0,0,0.75), transparent 55%)' : undefined}} />
+      <div style={{position: 'absolute', left: 0, right: 0, top: textTop, display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: 1 - out, transform: blender && !V ? 'scale(0.82)' : undefined, transformOrigin: '50% 0'}}>
         <div style={{display: 'flex', alignItems: 'center', gap: 34, opacity: nameIn, transform: `translateY(${(1 - nameIn) * 24}px) scale(${1 + 0.035 * hit})`, filter: hit > 0.02 ? `drop-shadow(0 0 ${40 * hit}px rgba(255,255,255,${0.5 * hit}))` : undefined}}>
           <Img src={icon} style={{width: V ? 150 : 128, height: V ? 150 : 128, borderRadius: V ? 34 : 29}} />
           <div style={{fontFamily: DISPLAY, fontWeight: 650, fontSize: V ? 130 : 124, letterSpacing: -5, color: C.text, lineHeight: 1}}>Agent Notch</div>

@@ -253,7 +253,7 @@ export const Trust: React.FC = () => {
     <AbsoluteFill style={{background: C.bg}}>
       <Backdrop f={f} light="rgba(255,255,255,0.05)" at={[50, 30]} />
       <div style={{position: 'absolute', left: 0, right: 0, top: V ? 520 : 200, textAlign: 'center', opacity: inP, transform: `translateY(${(1 - inP) * 24}px)`, filter: inP < 0.98 ? `blur(${(1 - inP) * 10}px)` : undefined}}>
-        <div style={{fontFamily: DISPLAY, fontWeight: 650, fontSize: V ? 136 : 150, letterSpacing: -6, color: C.text, lineHeight: 1.02}}>Only you approve.</div>
+        <div style={{fontFamily: DISPLAY, fontWeight: 650, fontSize: V ? 116 : 150, letterSpacing: -6, color: C.text, lineHeight: 1.02}}>Only you approve.</div>
         <div style={{fontFamily: BODY, fontWeight: 500, fontSize: V ? 42 : 38, color: C.sub, marginTop: 30, opacity: range(f, 8, 18)}}>A click or your hotkey. Nothing answers on its own.</div>
       </div>
       <div style={{position: 'absolute', left: bar.x, top: bar.y, width: bar.w, opacity: range(f, ev.timer - 8, ev.timer)}}>

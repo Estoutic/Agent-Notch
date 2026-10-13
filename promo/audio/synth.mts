@@ -3,9 +3,10 @@
  * Run: node audio/synth.mts   (Node >= 22.18 strips the types; ffmpeg on PATH)  -> public/audio/{promo,vertical}.wav
  *
  * Music: public/<MUSIC_FILE> (gitignored, never committed). The edit lives in src/timeline.ts (MUSIC, TRACK_*):
- * every segment is placed sample-accurately on the film's beat grid with 10 ms crossfades. At the final hit the
- * music stops, a synth impact lands and a reverb tail rings out. Without the file a simple synth bed stands in.
- * SFX are a separate bus; the music ducks under them. The sum is mastered with two-pass loudnorm to -14 LUFS, TP -1.5.
+ * every segment is placed sample-accurately on the film's beat grid with 10 ms crossfades. With a `hit` beat set the
+ * music stops there, a synth chord lands and a reverb tail rings out; without one the track plays to its own ending.
+ * Without the file a simple synth bed stands in. UI sounds are a separate bus and the music ducks under them;
+ * accents (impacts, risers, swells, whooshes) are mixed in without ducking. The sum is mastered with two-pass loudnorm to -14 LUFS, TP -1.5.
  */
 import {writeFileSync, mkdirSync, existsSync, unlinkSync} from 'node:fs';
 import {execFileSync, spawnSync} from 'node:child_process';
@@ -336,7 +337,7 @@ const place = (dst: Bus, src: Bus, t0: number, s0: number, len: number, fi: numb
 };
 
 const XF = 0.01; // crossfade at every cut
-const editTrack = (dst: Bus, track: Bus, segs: MusicSeg[], hit: number) => {
+const editTrack = (dst: Bus, track: Bus, segs: MusicSeg[], hit?: number) => {
   const pts: string[] = [];
   segs.forEach((s, i) => {
     const prev = segs[i - 1], next = segs[i + 1];
@@ -345,8 +346,9 @@ const editTrack = (dst: Bus, track: Bus, segs: MusicSeg[], hit: number) => {
     const t1 = filmT(s.to);
     if (s.from === 0) { s0 -= t0; t0 = 0; } // the film starts a few frames before beat 0
     const pre = joinedIn ? XF / 2 : 0, post = joinedOut ? XF / 2 : 0;
-    const fi = s.from === 0 ? 0.08 : joinedIn ? XF : 0.004;
-    const fo = s.to === hit ? 0.03 : joinedOut ? XF : 0.012;
+    // a hard cut (no neighbour) gets a 2 ms fade so the drop's attack survives; the film start fades in
+    const fi = s.from === 0 ? 0.08 : joinedIn ? XF : 0.002;
+    const fo = s.to === hit ? 0.03 : joinedOut ? XF : 0.002;
     place(dst, track, t0 - pre, s0 - pre, t1 - t0 + pre + post, fi, fo);
     pts.push(`film ${t0.toFixed(3)}-${t1.toFixed(3)} s <- track ${s0.toFixed(3)}-${(s0 + t1 - t0).toFixed(3)} s`);
   });
@@ -355,7 +357,7 @@ const editTrack = (dst: Bus, track: Bus, segs: MusicSeg[], hit: number) => {
 
 /* ---------- fallback bed when the track is missing ---------- */
 const CHORDS = [[57, 60, 64, 67], [57, 60, 65, 69], [55, 60, 64, 67], [55, 59, 62, 67]];
-const bed = (m: Mix, shots: ShotDef[], hit: number) => {
+const bed = (m: Mix, shots: ShotDef[], hit = Infinity) => {
   for (const sec of sections(shots)) {
     for (let b = sec.fromBeat; b < sec.toBeat && b < hit; b++) {
       const t = filmT(b);
@@ -386,20 +388,21 @@ const writeWav = (file: string, L: Float32Array, R: Float32Array) => {
 };
 
 const LUFS = -14, TP = -1.5;
+const ACCENTS = new Set(['impact', 'boom', 'thud', 'riser', 'swell', 'whoosh']);
 const measure = (file: string, extra = '') => {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', file, '-af', `${extra}loudnorm=I=${LUFS}:TP=${TP}:LRA=11:print_format=json`, '-f', 'null', '-'], {encoding: 'utf8', maxBuffer: 1 << 26}).stderr;
   return JSON.parse(r.slice(r.lastIndexOf('{'), r.lastIndexOf('}') + 1));
 };
 
-const render = (shots: ShotDef[], segs: MusicSeg[], hit: number, file: string) => {
+const render = (shots: ShotDef[], segs: MusicSeg[], hit: number | undefined, file: string) => {
   seed = 7;
   const dur = filmFrames(shots) / FPS;
   const n = Math.round(dur * SR);
-  const sfxMix = new Mix(n);
+  const sfxMix = new Mix(n), accent = new Mix(n);
   const mus = bus(n);
   const track = decode(new URL(`../public/${MUSIC_FILE}`, import.meta.url).pathname);
   let edit: string[] = [];
-  const hitT = filmT(hit);
+  const hitT = hit === undefined ? undefined : filmT(hit);
   if (track) edit = editTrack(mus, track, segs, hit);
   else {
     const m2 = new Mix(n);
@@ -408,23 +411,29 @@ const render = (shots: ShotDef[], segs: MusicSeg[], hit: number, file: string) =
     for (let k = 0; k < n; k++) { mus.L[k] = Math.tanh((m2.dry.L[k] + wl[k] * 0.9) * 0.6) * 0.5; mus.R[k] = Math.tanh((m2.dry.R[k] + wr[k] * 0.9) * 0.6) * 0.5; }
     edit = ['(no track: synth bed)'];
   }
-  // reverb tail: the last beat of music before the hit rings on past the cut
+  // with a synth hit: the last beat of music rings on through a reverb, and a low chord lands under the impact
   const tailIn = bus(n);
-  const k0 = Math.round((hitT - BEAT_S) * SR), k1 = Math.round(hitT * SR);
-  for (let k = Math.max(0, k0); k < Math.min(n, k1 + 1200); k++) {
-    const g = Math.min(1, (k - k0) / (0.1 * SR));
-    tailIn.L[k] = mus.L[k] * g; tailIn.R[k] = mus.R[k] * g;
+  if (hitT !== undefined) {
+    const k0 = Math.round((hitT - BEAT_S) * SR), k1 = Math.round(hitT * SR);
+    for (let k = Math.max(0, k0); k < Math.min(n, k1 + 1200); k++) {
+      const g = Math.min(1, (k - k0) / (0.1 * SR));
+      tailIn.L[k] = mus.L[k] * g; tailIn.R[k] = mus.R[k] * g;
+    }
+    accent.put(hitT, dur - hitT, (t) => {
+      const a = Math.min(1, t / 0.02) * Math.exp(-t / 1.1);
+      return (Math.sin(TAU * 55 * t) * 0.6 + Math.sin(TAU * 110 * t) * 0.3 + Math.sin(TAU * 164.8 * t) * 0.12) * a;
+    }, 0.5, 0, 0.5);
   }
   const tl = reverb(tailIn.L, n, 0, 0.9), tr = reverb(tailIn.R, n, 31, 0.9);
-  // the closing hit: a low sustained chord swell under the impact
-  sfxMix.put(hitT, dur - hitT, (t) => {
-    const a = Math.min(1, t / 0.02) * Math.exp(-t / 1.1);
-    return (Math.sin(TAU * 55 * t) * 0.6 + Math.sin(TAU * 110 * t) * 0.3 + Math.sin(TAU * 164.8 * t) * 0.12) * a;
-  }, 0.5, 0, 0.5);
-  for (const c of cues(shots)) sfx(sfxMix, c as Cue, c.f / FPS);
+  // UI sounds duck the music; accents (impacts, risers, swells) sit with it and do not
+  for (const c of cues(shots)) sfx(ACCENTS.has(c.s) ? accent : sfxMix, c as Cue, c.f / FPS);
   const wetL = reverb(sfxMix.wet.L, n, 0), wetR = reverb(sfxMix.wet.R, n, 23);
-  const sL = new Float32Array(n), sR = new Float32Array(n);
-  for (let k = 0; k < n; k++) { sL[k] = Math.tanh((sfxMix.dry.L[k] + wetL[k] * 0.9) * 0.6); sR[k] = Math.tanh((sfxMix.dry.R[k] + wetR[k] * 0.9) * 0.6); }
+  const aWL = reverb(accent.wet.L, n, 0), aWR = reverb(accent.wet.R, n, 23);
+  const sL = new Float32Array(n), sR = new Float32Array(n), aL = new Float32Array(n), aR = new Float32Array(n);
+  for (let k = 0; k < n; k++) {
+    sL[k] = Math.tanh((sfxMix.dry.L[k] + wetL[k] * 0.9) * 0.6); sR[k] = Math.tanh((sfxMix.dry.R[k] + wetR[k] * 0.9) * 0.6);
+    aL[k] = Math.tanh((accent.dry.L[k] + aWL[k] * 0.9) * 0.6); aR[k] = Math.tanh((accent.dry.R[k] + aWR[k] * 0.9) * 0.6);
+  }
   // duck: follow the SFX level (5 ms attack, 180 ms release), pull the music down up to 6 dB
   const att = Math.exp(-1 / (0.005 * SR)), rel = Math.exp(-1 / (0.18 * SR));
   let e = 0;
@@ -436,8 +445,8 @@ const render = (shots: ShotDef[], segs: MusicSeg[], hit: number, file: string) =
     e = x > e ? att * e + (1 - att) * x : rel * e + (1 - rel) * x;
     const duck = 1 - 0.5 * Math.min(1, e / 0.25);
     const end = k > n - fadeN ? (n - k) / fadeN : 1;
-    L[k] = ((mus.L[k] + tl[k] * 0.6) * MUS * duck + sL[k] * SFX) * end;
-    R[k] = ((mus.R[k] + tr[k] * 0.6) * MUS * duck + sR[k] * SFX) * end;
+    L[k] = ((mus.L[k] + tl[k] * 0.6) * MUS * duck + (sL[k] + aL[k] * 0.8) * SFX) * end;
+    R[k] = ((mus.R[k] + tr[k] * 0.6) * MUS * duck + (sR[k] + aR[k] * 0.8) * SFX) * end;
   }
   const tmp = file.replace(/\.wav$/, '.raw.wav');
   writeWav(tmp, L, R);
@@ -448,7 +457,7 @@ const render = (shots: ShotDef[], segs: MusicSeg[], hit: number, file: string) =
   unlinkSync(tmp);
   const m2 = measure(file);
   console.log(`${file}: ${dur.toFixed(2)} s · ${m2.input_i} LUFS · TP ${m2.input_tp} dBTP · LRA ${m2.input_lra}`);
-  console.log(`  music edit (hit at film ${hitT.toFixed(3)} s):\n  ` + edit.join('\n  '));
+  console.log(`  music edit${hitT === undefined ? ' (the track plays to its own ending)' : ` (synth hit at film ${hitT.toFixed(3)} s)`}:\n  ` + edit.join('\n  '));
 };
 
 const out = new URL('../public/audio/', import.meta.url).pathname;

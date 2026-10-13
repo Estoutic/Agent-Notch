@@ -11,7 +11,7 @@ Install once: `cd promo && npm install` (Remotion is pinned at 4.0.290; keep eve
 3. Render:
    - `Promo`, 1920x1080, 30 fps, 59.6 s (must stay under 15 MB):
      `npx remotion render src/index.ts Promo out/agent-notch-promo.mp4 --codec=h264 --crf=23 --audio-bitrate=192k`
-   - `Vertical`, 1080x1920, 43.0 s, a separate edit for Shorts, Reels and X:
+   - `Vertical`, 1080x1920, 42.1 s, a separate edit for Shorts, Reels and X:
      `npx remotion render src/index.ts Vertical out/agent-notch-vertical.mp4 --codec=h264 --crf=23 --audio-bitrate=192k`
    - `Hero`, a 9 s seamless loop for the README, rendered at 1280x720:
      `npx remotion render src/index.ts Hero out/agent-notch-hero.mp4 --codec=h264 --crf=20 --scale=0.6667`
@@ -37,32 +37,31 @@ Picture and sound both read this file, so rerun `node audio/synth.mts` after cha
 
 ## Music
 
-The track is `public/<MUSIC_FILE>`, currently `public/music-suno-v1.wav`. It is gitignored (`public/music*.wav`) and must never be committed: it is licensed for use in the film, not for redistribution. Any sample rate works; synth.mts decodes it to 48 kHz with ffmpeg.
+The track is `public/<MUSIC_FILE>`, currently `public/music-suno-v2-4.wav` (it replaced `music-suno-v1.wav`). Music files are gitignored (`public/music*.wav`) and must never be committed: they are licensed for use in the film, not for redistribution. Any sample rate works; synth.mts decodes to 48 kHz with ffmpeg.
 
 The edit is data in `src/timeline.ts`:
 
-- `TRACK_DROP_S`: the track second of the drop, the first downbeat of the full groove (16.3 s in v1).
+- `TRACK_DROP_S`: the track second of the drop, the first downbeat of the full groove (3.968 s in v2-4, read off the onset).
 - `TRACK_BPM`: the track tempo. Keep it equal to `BPM`; the picture and the music share one grid.
-- `TRACK_SECTIONS`: where the sections start, in beats from the drop (v1: dark breakdown 40, groove 48, breakdown 75, brightest 84, outro 108). It documents the track; the code does not read it.
-- `MUSIC.promo` and `MUSIC.vertical`: segments `{from, to, src}`, meaning film beats `from..to` play the track from beat `src` (counted from the drop, negative before it). A gap between segments is silence: in both cuts film beats 8–10 are silent, the dead stop on "You.". Every cut gets a 10 ms crossfade.
-- `MUSIC.promoHit` and `MUSIC.verticalHit`: the film beat of the final hit. There the music stops on a 30 ms fade, the synth impact and a low chord land, and the last beat of music rings out through a reverb. Both hits sit on track beat 108 (68.96 s in v1), where the track falls into its outro.
+- `TRACK_SECTIONS`: where the sections start, in beats from the drop. v2-4: breakdown 24–32, groove 32–56, breakdown 56–64, groove 64–103 with a softer stretch at 89–96, the final hit at 104.8 (55.08 s), faded below -60 dB by 112. It documents the track; the code does not read it.
+- `MUSIC.promo` and `MUSIC.vertical`: segments `{from, to, src}`, meaning film beats `from..to` play the track from beat `src` (counted from the drop, negative before it). A gap between segments is silence: in both cuts film beats 8–10 (4.03–5.0 s) are silent, the dead stop on "You.". Joined segments get a 10 ms crossfade; the hard cuts around the silence get 2 ms so the drop keeps its attack.
+- `MUSIC.promoHit` / `MUSIC.verticalHit` (optional): with a film beat set, the music stops there, a synth chord lands and the last beat rings out through a reverb. v2-4 has its own hit and fade, so both are unset and the track plays to its own ending.
+- `EV.end.hit` puts the name's pulse on the track's hit: film beat 114.8 in the promo, 78.8 in the vertical.
 
-Edit points in v1, as synth.mts prints them:
+Edit points with v2-4, as synth.mts prints them:
 
 | Cut | Film | Track |
 |---|---|---|
-| Promo | 0.000–4.025 s | 11.300–15.325 s, the build |
+| Promo | 0.000–4.025 s | 0.000–3.968 s, the intro (starts 57 ms in, so the drop's onset falls on film beat 8) |
 | Promo | 4.025–5.000 s | silence |
-| Promo | 5.000–57.662 s | 16.300–68.962 s, continuous (film time = track time − 11.30 s) |
-| Promo | 57.662 s | final hit, ring-out to 59.6 s |
-| Vertical | 0.000–4.025 s | 11.300–15.325 s |
+| Promo | 5.000–59.612 s | 3.968–58.580 s, continuous (film time = track time + 1.032 s); hit at film 56.11 s, fade to the end |
+| Vertical | 0.000–4.025 s | 0.000–3.968 s |
 | Vertical | 4.025–5.000 s | silence |
-| Vertical | 5.000–18.653 s | 16.300–29.953 s, drop and groove |
-| Vertical | 18.653–32.306 s | 35.804–49.457 s, dark breakdown under `risky`, then groove |
-| Vertical | 32.306–34.744 s | 54.821–57.259 s, end of the breakdown and its pickup |
-| Vertical | 34.744–38.645 s | 57.259–61.160 s, brightest part under `themes` |
-| Vertical | 38.645–41.083 s | 66.523–68.962 s, the last bar before the outro |
-| Vertical | 41.083 s | final hit, ring-out to 43.0 s |
+| Vertical | 5.000–16.703 s | 3.968–15.671 s, drop and groove |
+| Vertical | 16.703–30.356 s | 13.720–27.373 s, back one bar, so the first breakdown sits under `risky` |
+| Vertical | 30.356–42.058 s | 46.877–58.580 s, forward ten bars: soft stretch under `trust`, groove under `themes`, hit at 38.55 s in `end` |
+
+Sections in the promo: the first breakdown sits under `open` and `usage`, the second under `risky`.
 
 ### Dropping in a new take
 
@@ -75,7 +74,7 @@ Edit points in v1, as synth.mts prints them:
    It prints the tempo, the beats where the level steps up or down (the section changes), and a level table per beat.
 3. Find the drop by ear or in the table and rerun with `--drop <second>`; the table then counts beats from the drop. The "grid error" line should be a median under about 30 ms, which means the BPM and the drop agree.
 4. Set `TRACK_DROP_S` and `BPM`. A new tempo moves every cut: check that the drop still lands at 5.0 s and the promo stays 55–65 s long.
-5. Read the section starts off the table into `TRACK_SECTIONS`, then move the `src` beats so that `risky` sits on the dark breakdown, `trust` and `sounds` on the breakdown before the brightest part, `themes` starts on the brightest part, and the hit lands where the track falls into its outro.
+5. Read the section starts off the table into `TRACK_SECTIONS`. Then move the `src` beats, or the shot lengths, so that `risky` sits on a breakdown and the end's `EV.end.hit` lands on the track's final hit. In the vertical, jump only on bar lines: change `src - from` by multiples of 4. If the take has no hit of its own, set `promoHit`/`verticalHit` and the synth adds one.
 6. Run `node audio/synth.mts` and render.
 
 Loudness of any file: `ffmpeg -i file.wav -af loudnorm=print_format=json -f null -`

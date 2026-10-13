@@ -36,9 +36,9 @@ export type Section = 'intro' | 'stop' | 'drop' | 'grooveA' | 'dark' | 'grooveB'
 export type ShotDef = {id: ShotId; beats: number; music: Section};
 
 /*
- * Landscape cut. Film beats in brackets; the music sections of the Suno take sit on them (see MUSIC below):
- * intro [0-8] · dead stop [8-10] · drop [10] · groove [10-50] · dark breakdown [50-58] · groove [58-85]
- * · breakdown [85-94] · brightest [94-118] · final hit and ring-out [118-122].
+ * Landscape cut. Film beats in brackets; the sections of the music take sit on them (see MUSIC below):
+ * intro [0-8] · dead stop [8-10] · drop [10] · groove [10-34] · breakdown [34-42] · groove [42-66]
+ * · breakdown [66-74] · groove [74-113] · the track's final hit [114.8] and its fade to the end [122].
  */
 export const PROMO: ShotDef[] = [
   {id: 'cascade', beats: 4, music: 'intro'},
@@ -49,20 +49,20 @@ export const PROMO: ShotDef[] = [
   {id: 'title', beats: 3, music: 'grooveA'},
   {id: 'states', beats: 5, music: 'grooveA'},
   {id: 'anatomy', beats: 6, music: 'grooveA'},
-  {id: 'open', beats: 4, music: 'grooveA'},
-  {id: 'usage', beats: 4, music: 'grooveA'},
+  {id: 'open', beats: 4, music: 'breakdown'},
+  {id: 'usage', beats: 4, music: 'breakdown'},
   {id: 'jump', beats: 4, music: 'grooveA'},
   {id: 'keys', beats: 5, music: 'grooveA'},
+  {id: 'question', beats: 7, music: 'grooveA'},
+  {id: 'plan', beats: 9, music: 'grooveA'},
   {id: 'risky', beats: 8, music: 'dark'},
-  {id: 'question', beats: 6, music: 'grooveB'},
-  {id: 'plan', beats: 8, music: 'grooveB'},
   {id: 'card', beats: 9, music: 'grooveB'},
   {id: 'toast', beats: 4, music: 'grooveB'},
-  {id: 'trust', beats: 5, music: 'breakdown'},
-  {id: 'sounds', beats: 4, music: 'breakdown'},
+  {id: 'trust', beats: 5, music: 'grooveB'},
+  {id: 'sounds', beats: 4, music: 'grooveB'},
   {id: 'themes', beats: 8, music: 'bright'},
-  {id: 'presets', beats: 4, music: 'bright'},
-  {id: 'hosts', beats: 4, music: 'bright'},
+  {id: 'presets', beats: 3, music: 'bright'},
+  {id: 'hosts', beats: 3, music: 'bright'},
   {id: 'local', beats: 3, music: 'bright'},
   {id: 'end', beats: 9, music: 'final'},
 ];
@@ -81,8 +81,8 @@ export const VERTICAL: ShotDef[] = [
   {id: 'risky', beats: 8, music: 'dark'},
   {id: 'question', beats: 6, music: 'grooveB'},
   {id: 'card', beats: 9, music: 'grooveB'},
-  {id: 'toast', beats: 5, music: 'grooveB'},
-  {id: 'trust', beats: 5, music: 'breakdown'},
+  {id: 'toast', beats: 4, music: 'grooveB'},
+  {id: 'trust', beats: 4, music: 'breakdown'},
   {id: 'themes', beats: 8, music: 'bright'},
   {id: 'end', beats: 9, music: 'final'},
 ];
@@ -92,30 +92,32 @@ export const VERTICAL: ShotDef[] = [
  * crossfades at every cut. `src` is a beat of the track counted from its drop (negative = before the drop).
  * A new take drops in by changing MUSIC_FILE, the four TRACK_* numbers and, if its sections moved, the src beats.
  */
-export const MUSIC_FILE = 'music-suno-v1.wav';
-/** Track second of the drop (the first downbeat of the full groove). */
-export const TRACK_DROP_S = 16.3;
+export const MUSIC_FILE = 'music-suno-v2-4.wav';
+/** Track second of the drop (the first downbeat of the full groove), measured from the onset. */
+export const TRACK_DROP_S = 3.968;
 export const TRACK_BPM = BPM;
-/** Track sections in beats from the drop, measured (RMS per beat): dark 40-47, breakdown 75-83, brightest 84-107, breakdown from 108. */
-export const TRACK_SECTIONS = {dark: 40, groove2: 48, breakdown: 75, bright: 84, outro: 108};
+/**
+ * Track sections in beats from the drop, measured (RMS per beat and onsets): groove 0-24, breakdown 24-32, groove
+ * 32-56, breakdown 56-64, groove 64-103 (a softer stretch 89-96), final hit at 104.8 (55.08 s), fade to -60 dB by 112.
+ */
+export const TRACK_SECTIONS = {breakdown1: 24, groove2: 32, breakdown2: 56, groove3: 64, hit: 104.8, faded: 112};
 export type MusicSeg = {from: number; to: number; src: number};
-/** Film beats [from, to) play the track from beat `src`. Gaps are silence; after the last segment the synth adds the final hit. */
-export const MUSIC: {promo: MusicSeg[]; vertical: MusicSeg[]; promoHit: number; verticalHit: number} = {
+/**
+ * Film beats [from, to) play the track from beat `src`. Gaps are silence. With `hit` set, the music stops there and
+ * the synth adds a final hit and a reverb tail; without it the track plays out to its own ending.
+ */
+export const MUSIC: {promo: MusicSeg[]; vertical: MusicSeg[]; promoHit?: number; verticalHit?: number} = {
   promo: [
-    {from: 0, to: 8, src: -10}, // the build before the drop
+    {from: 0, to: 8, src: -8}, // the intro; the drop's onset falls exactly on film beat 8 and is cut there
     // 8-10: dead stop ("You.")
-    {from: 10, to: 118, src: 0}, // from the drop, continuous, to the start of the track's outro breakdown
+    {from: 10, to: 122, src: 0}, // from the drop, continuous: hit at film beat 114.8, the track's own fade ends the film
   ],
-  promoHit: 118,
   vertical: [
-    {from: 0, to: 8, src: -10},
-    {from: 10, to: 38, src: 0}, // drop + groove
-    {from: 38, to: 66, src: 40}, // dark breakdown (risky), then the groove after it
-    {from: 66, to: 71, src: 79}, // the end of the breakdown and its pickup
-    {from: 71, to: 79, src: 84}, // the brightest section (themes)
-    {from: 79, to: 84, src: 103}, // its last bar, into the boundary
+    {from: 0, to: 8, src: -8},
+    {from: 10, to: 34, src: 0}, // drop and groove
+    {from: 34, to: 62, src: 20}, // back one bar on a bar line, so the first breakdown lands on risky (38-46)
+    {from: 62, to: 86, src: 88}, // forward ten bars on a bar line: soft stretch under trust, groove under themes, the hit in end
   ],
-  verticalHit: 84,
 };
 
 export type Placed = ShotDef & {startBeat: number; from: number; to: number};
@@ -163,10 +165,10 @@ export const EV = {
   toast: {finish: 0.5},
   themes: {first: 0},
   sounds: {play: 1.5},
-  presets: {detailed: 1.25, everything: 2.5},
-  hosts: {vscode: 1.25, desktop: 2.5},
+  presets: {detailed: 1, everything: 2},
+  hosts: {vscode: 1, desktop: 2},
   local: {line2: 1},
-  end: {install: 1.5, url: 2.5, hit: 5},
+  end: {hit: 1.81, install: 2.4, url: 3.6}, // hit = the track's final hit (track beat 104.8, 55.08 s)
 } as const;
 
 /** Theme montage: 13 skins; Terminal, Synthwave and Pixel are the three hero looks and hold longer. */
@@ -184,7 +186,7 @@ const SHOT_CUES: Record<ShotId, Cue[]> = {
     ...Array.from({length: 12}, (_, i) => ({b: 0.15 + i * 0.3, s: 'pop' as Sfx, v: 0.3, p: 0.8 + (i % 5) * 0.08})),
   ],
   freeze: [{b: EV.freeze.stop, s: 'tick', v: 0.9}, {b: EV.freeze.prompt, s: 'chime', p: 0.75, v: 0.35}, {b: EV.freeze.dive - 0.3, s: 'riser', d: 0.7, v: 0.8}],
-  you: [{b: 0, s: 'thud', v: 0.6}],
+  you: [], // dead silence under "You."
   reveal: [{b: 0, s: 'impact'}, {b: 0, s: 'boom'}, {b: EV.reveal.pull, s: 'whoosh', d: 1.2, v: 0.8}],
   approve: [{b: EV.approve.click, s: 'click'}, {b: EV.approve.open, s: 'swell', v: 0.5}, {b: EV.approve.allow, s: 'click'}, {b: EV.approve.allow + 0.05, s: 'approve'}],
   title: [{b: 0, s: 'whoosh', d: 0.5, v: 0.5}],
@@ -212,7 +214,7 @@ const SHOT_CUES: Record<ShotId, Cue[]> = {
   presets: [{b: 0, s: 'click', v: 0.6}, {b: EV.presets.detailed, s: 'click', v: 0.6}, {b: EV.presets.everything, s: 'click', v: 0.6}],
   hosts: [{b: 0, s: 'whoosh', d: 0.3, v: 0.5}, {b: EV.hosts.vscode, s: 'whoosh', d: 0.3, v: 0.5}, {b: EV.hosts.desktop, s: 'whoosh', d: 0.3, v: 0.5}],
   local: [{b: 0, s: 'tick', v: 0.5}, {b: EV.local.line2, s: 'tick', v: 0.5, p: 0.8}],
-  end: [{b: 0, s: 'whoosh', d: 0.5, v: 0.5}, {b: EV.end.install, s: 'type', d: 1, v: 0.45}, {b: EV.end.hit, s: 'impact'}, {b: EV.end.hit, s: 'boom'}],
+  end: [{b: 0, s: 'whoosh', d: 0.5, v: 0.5}, {b: EV.end.install, s: 'type', d: 1, v: 0.45}],
 };
 
 /** Absolute cue list of a film, in frames. */
