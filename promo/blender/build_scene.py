@@ -42,7 +42,8 @@ HINGE_Z = 3.6
 
 def args():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    o = {"shots": "all", "samples": 64, "frames": None, "scale": 100, "out": PUBLIC, "save_blend": None, "engine": "CYCLES"}
+    o = {"shots": "all", "samples": 64, "frames": None, "scale": 100, "out": PUBLIC, "save_blend": None, "engine": "CYCLES",
+         "face": None, "mask": None, "screen": 1.0, "key": 1.0, "fill": 1.0}
     i = 0
     while i < len(a):
         k = a[i].lstrip("-").replace("-", "_")
@@ -50,6 +51,9 @@ def args():
         i += 2
     o["samples"] = int(o["samples"])
     o["scale"] = int(o["scale"])
+    o["screen"] = float(o["screen"])
+    o["key"] = float(o["key"])
+    o["fill"] = float(o["fill"])
     return o
 
 
@@ -318,8 +322,9 @@ def build(o):
     sc = bpy.context.scene
     sc.unit_settings.system = 'METRIC'
 
-    face_img = bpy.data.images.load(os.path.join(CACHE, "face.png"))
-    mask_img = bpy.data.images.load(os.path.join(CACHE, "mask.png"))
+    # --face/--mask swap the screen (v5: a theme per shot); --screen scales its emission, --key the key light
+    face_img = bpy.data.images.load(os.path.abspath(o["face"]) if o["face"] else os.path.join(CACHE, "face.png"))
+    mask_img = bpy.data.images.load(os.path.abspath(o["mask"]) if o["mask"] else os.path.join(CACHE, "mask.png"))
 
     alu = aluminium("Aluminium", (0.80, 0.805, 0.815), grille=True)
     alu_lid = aluminium("AluminiumLid", (0.80, 0.805, 0.815))
@@ -332,7 +337,7 @@ def build(o):
     hinge_mat.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = 0.6
     rubber = plastic("Rubber", (0.008, 0.008, 0.008), 0.8)
     port = plastic("Port", (0.004, 0.004, 0.0045), 0.5)
-    glass = glass_face("Glass", face_img, mask_img, screen_strength=1.0, glow_boost=1.8)
+    glass = glass_face("Glass", face_img, mask_img, screen_strength=o["screen"], glow_boost=1.8)
     lens = plastic("Lens", (0.002, 0.003, 0.006), 0.05)
     lens.node_tree.nodes["Principled BSDF"].inputs["Coat Weight"].default_value = 1.0
     lens_ring = plastic("LensRing", (0.03, 0.03, 0.035), 0.25)
@@ -446,11 +451,12 @@ def build(o):
         return ob
 
     # big soft key above-front for the deck gradient, two rims behind for the lid edges, a low kicker for the base edge
-    area("Key", (-0.10, 0.10, 1.10), (0, 0.0, 0.0), 0.9, 7, (1.0, 0.98, 0.96))
+    area("Key", (-0.10, 0.10, 1.10), (0, 0.0, 0.0), 0.9, 7 * o["key"], (1.0, 0.98, 0.96))
     area("RimL", (-0.75, 0.45, 0.55), (0.0, 0.12, 0.18), 0.10, 14, (0.96, 0.98, 1.0), size_y=0.8)
-    area("RimR", (0.85, 0.30, 0.45), (0.0, 0.14, 0.17), 0.10, 5, (1.0, 0.97, 0.94), size_y=0.8)
-    area("Top", (0.0, 0.55, 0.75), (0.0, 0.15, 0.24), 0.9, 6, (1, 1, 1), size_y=0.06)
-    area("Kicker", (0.0, -0.9, 0.04), (0, 0, 0.01), 1.2, 1.2, (1, 1, 1), size_y=0.12)
+    # --fill scales everything but the key and the left rim (v5 themes: the screen is the light)
+    area("RimR", (0.85, 0.30, 0.45), (0.0, 0.14, 0.17), 0.10, 5 * o["fill"], (1.0, 0.97, 0.94), size_y=0.8)
+    area("Top", (0.0, 0.55, 0.75), (0.0, 0.15, 0.24), 0.9, 6 * o["fill"], (1, 1, 1), size_y=0.06)
+    area("Kicker", (0.0, -0.9, 0.04), (0, 0, 0.01), 1.2, 1.2 * o["fill"], (1, 1, 1), size_y=0.12)
 
     for nm in filter(None, os.environ.get("LIGHTS_OFF", "").split(",")):
         if nm == "World":
@@ -653,7 +659,46 @@ def shot_endcard(f, n, hinge, vertical=False):
     return loc, tgt, 50, 11, Vector((0, 0.03, 0.08))
 
 
+# ---------------------------------------------------------------- v5 "Slowest Process"
+# Stage pixels (the app's @2x snapshots, 3024 x 1964 screen) map 0.1 mm each onto the lid; x from the notch centre.
+STAGE_MM = 0.1
+STAGE_NOTCH_CX = 976
+
+
+def stage_point(hinge, sx, sy):
+    return lid_point(hinge, (sx - STAGE_NOTCH_CX) * STAGE_MM, ACTIVE_TOP - sy * STAGE_MM)
+
+
+def shot_dive(f, n, hinge, vertical=False):
+    """B: three-quarter hero to square-on, ending on the panel area at 2.4x stage (1920 px = 800 stage px)."""
+    set_lid(hinge, 110)
+    t = f / (n - 1)
+    # 18 fast frames, 27 settling
+    e = 1 - (1 - min(1.0, t * (n - 1) / 18)) ** 3 if f < 18 else 1 - 0.03 * (1 - smoothstep(18, n - 1, f)) ** 2
+    nrm = screen_normal(hinge)
+    end_tgt = stage_point(hinge, 780, 250)
+    end_dist = (1920 / 2.4 * STAGE_MM * MM) / 2 / (18 / 50)
+    end_cam = end_tgt + nrm * end_dist
+    start_cam = orbit(HERO_T, 34, 21, 0.92)
+    loc = vlerp(start_cam, end_cam, e)
+    side = math.sin(math.pi * e) * 0.06
+    loc += Vector((side * 0.6, 0, side * 0.3))
+    tgt = vlerp(HERO_T, end_tgt, min(1.0, e * 1.08))
+    return loc, tgt, 50, 5.6, tgt
+
+
+def shot_themes(f, n, hinge, vertical=False):
+    """E: 80 degree low arc on black, 35 mm; the screen lights the metal."""
+    set_lid(hinge, 108)
+    t = ease_io(f / (n - 1), 2.2)
+    tgt = HERO_T + Vector((0, 0.01, -0.01))
+    loc = orbit(tgt, lerp(55, -25, t), lerp(12, 22, t), 0.70)
+    return loc, tgt, 35, 8.0, tgt
+
+
 SHOTS = {
+    "dive": (45, (1920, 1080), shot_dive, False),
+    "themes": (195, (1920, 1080), shot_themes, False),
     "reveal": (90, (1920, 1080), shot_reveal, False),
     "orbit": (60, (1920, 1080), shot_orbit, False),
     "push": (45, (1920, 1080), shot_push, False),

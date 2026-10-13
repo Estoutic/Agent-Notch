@@ -152,7 +152,8 @@ enum Snapshot {
 
     @discardableResult private static func write<V: View>(_ scene: V, to url: URL) -> Bool {
         let renderer = ImageRenderer(content: scene)
-        renderer.scale = 2
+        // AGENT_NOTCH_SNAPSHOT_SCALE=3 renders sharper PNGs for close-ups in the launch film.
+        renderer.scale = Double(ProcessInfo.processInfo.environment["AGENT_NOTCH_SNAPSHOT_SCALE"] ?? "").flatMap { $0 > 0 ? $0 : nil } ?? 2
         guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return false }
         do { try png.write(to: url); return true }
