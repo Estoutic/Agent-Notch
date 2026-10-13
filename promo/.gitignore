@@ -1,3 +1,5 @@
 node_modules/
 out/
 public/audio/
+public/music*.wav
+public/blender/*/
