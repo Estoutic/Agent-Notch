@@ -14,7 +14,7 @@ import {TopList, youCell} from './Top';
 loadFonts();
 
 export const PROTO_LEN = 510;
-type V = 'A' | 'B';
+export type V = 'A' | 'B';
 
 /* ---------- film devices ---------- */
 const HITS: Record<V, {f: number; a: number}[]> = {
@@ -24,9 +24,10 @@ const HITS: Record<V, {f: number; a: number}[]> = {
     {f: 390, a: 30}, {f: 420, a: 8}, {f: 450, a: 18}, {f: 462, a: 8}, {f: 480, a: 18}, {f: 492, a: 10}],
 };
 /** Decaying shake after each hit; B adds a constant handheld drift. */
-const shake = (f: number, v: V) => {
+const shake = (f: number, v: V) => shakeFrom(HITS[v], f, v === 'B');
+export const shakeFrom = (hits: {f: number; a: number}[], f: number, drift: boolean) => {
   let x = 0, y = 0, r = 0;
-  for (const h of HITS[v]) {
+  for (const h of hits) {
     const t = f - h.f;
     if (t < 0 || t > 10) continue;
     const k = h.a * Math.exp(-t / 3);
@@ -34,32 +35,32 @@ const shake = (f: number, v: V) => {
     y += (random(`sy${h.f}-${t}`) - 0.5) * 2 * k;
     r += (random(`sr${h.f}-${t}`) - 0.5) * 0.5 * (k / 20);
   }
-  if (v === 'B') {
+  if (drift) {
     x += Math.sin(f / 23) * 5 + Math.sin(f / 9.3) * 2;
     y += Math.cos(f / 29) * 4 + Math.sin(f / 7.1) * 1.5;
   }
   return {x, y, r};
 };
-const Flash: React.FC<{f: number; at: number; color?: string; len?: number; peak?: number}> = ({f, at, color = '#fff', len = 5, peak = 0.9}) => {
+export const Flash: React.FC<{f: number; at: number; color?: string; len?: number; peak?: number}> = ({f, at, color = '#fff', len = 5, peak = 0.9}) => {
   if (f < at || f >= at + len) return null;
   return <AbsoluteFill style={{background: color, opacity: peak * (1 - (f - at) / len), mixBlendMode: 'screen'}} />;
 };
 /** Word that slams in: 1.18 -> 1 scale in 4 frames, on in 1. */
-const slam = (f: number, at: number) => {
+export const slam = (f: number, at: number) => {
   const t = clamp01((f - at) / 4);
   return {opacity: f >= at ? 1 : 0, transform: `scale(${lerp(1.18, 1, travel(t))})`};
 };
 /** RGB split for B's glitch frames. */
-const glitch = (f: number, at: number, n = 3) => (f >= at && f < at + n ? `drop-shadow(${8 - (f - at) * 3}px 0 0 rgba(255,40,40,0.9)) drop-shadow(${-(8 - (f - at) * 3)}px 0 0 rgba(40,220,255,0.9))` : undefined);
+export const glitch = (f: number, at: number, n = 3) => (f >= at && f < at + n ? `drop-shadow(${8 - (f - at) * 3}px 0 0 rgba(255,40,40,0.9)) drop-shadow(${-(8 - (f - at) * 3)}px 0 0 rgba(40,220,255,0.9))` : undefined);
 
-const G: React.FC<{size: number; children: React.ReactNode; color?: string; style?: React.CSSProperties; mono?: boolean; weight?: number}> = ({size, children, color = P.text, style, mono, weight}) => (
+export const G: React.FC<{size: number; children: React.ReactNode; color?: string; style?: React.CSSProperties; mono?: boolean; weight?: number}> = ({size, children, color = P.text, style, mono, weight}) => (
   <div style={{fontFamily: mono ? T.mono : T.display, fontWeight: weight ?? (mono ? 600 : 700), fontSize: size, letterSpacing: mono ? 0 : -size * 0.035, lineHeight: 0.95, color, whiteSpace: 'pre', ...style}}>{children}</div>
 );
 
 /* ---------- 1-3 (0-150): the list, the lock, the accusation ---------- */
 const SORT = 15;
 const ZOOMS = [{f: 22, k: 2.0}, {f: 30, k: 3.6}, {f: 37, k: 7.0}];
-const Hook: React.FC<{f: number; v: V}> = ({f, v}) => {
+export const Hook: React.FC<{f: number; v: V}> = ({f, v}) => {
   if (f < 45) {
     // crash zoom in three steps on the eighths into the `you` cell; each step travels over 3 frames
     let k = lerp(1, 1.06, f / 22), s = 0;
@@ -151,7 +152,7 @@ const STATES = [
   {at: 190, w: 'stuck', c: P.red},
   {at: 205, w: 'done', c: '#B8B8C0'},
 ];
-const Reveal: React.FC<{f: number; v: V}> = ({f, v}) => {
+export const Reveal: React.FC<{f: number; v: V}> = ({f, v}) => {
   const lf = f - 150;
   const pf = 89 * (1 - Math.pow(1 - clamp01(lf / 120), 2.2));
   const st = [...STATES].reverse().find((s) => f >= s.at && f < 220);
@@ -180,7 +181,7 @@ const Reveal: React.FC<{f: number; v: V}> = ({f, v}) => {
 };
 
 /* ---------- 5 (270-390): the dive, the request, the clock running ---------- */
-const Ask: React.FC<{f: number; v: V}> = ({f, v}) => {
+export const Ask: React.FC<{f: number; v: V}> = ({f, v}) => {
   const push = lerp(1, 1.14, span(f, 318, 392, (t) => t * t * (3 - 2 * t)));
   // the clock runs fast: one second every 7.5 frames, on the sixteenths
   const secs = 14 + Math.max(0, Math.floor((f - 316) / 7.5));
@@ -203,7 +204,7 @@ const Ask: React.FC<{f: number; v: V}> = ({f, v}) => {
 };
 
 /* ---------- 6 (390-420): the drop: green, 2 seconds ---------- */
-const Drop: React.FC<{f: number; v: V}> = ({f, v}) => {
+export const Drop: React.FC<{f: number; v: V}> = ({f, v}) => {
   const lines = Array.from({length: 22}, (_, i) => `✓ ${['compresses 4K to 720p', 'keeps aspect ratio', 'skips files under 8 MB', 'falls back without WebCodecs', 'reports progress', 'cancels cleanly', 'retries on 503'][i % 7]}`);
   const scroll = (f - 390) * 26;
   const strike = span(f, 404, 410);
@@ -232,7 +233,7 @@ const Card: React.FC<{title: string; cmd: string; ok: boolean; n: number}> = ({t
     <div style={{fontFamily: T.mono, fontSize: 64, fontWeight: 600, color: P.text, marginTop: 10}}>{cmd}</div>
   </div>
 );
-const Keys: React.FC<{f: number; v: V}> = ({f, v}) => {
+export const Keys: React.FC<{f: number; v: V}> = ({f, v}) => {
   const second = f >= 462;
   const at = second ? 462 : 420;
   const key = second ? 480 : 450;
@@ -266,7 +267,7 @@ const Keys: React.FC<{f: number; v: V}> = ({f, v}) => {
 };
 
 /* ---------- B: the monitor ---------- */
-const Hud: React.FC<{f: number}> = ({f}) => {
+export const Hud: React.FC<{f: number}> = ({f}) => {
   const tc = (x: number) => {
     const fr = Math.floor(x);
     const s = Math.floor(fr / 30);

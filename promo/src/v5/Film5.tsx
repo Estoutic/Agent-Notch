@@ -1,49 +1,81 @@
-/* v5 "Slowest Process", 59 s at 30 fps. Built beat by beat from research/v5/creative-treatment.md section 3. */
+/* v5 "Slowest Process", 59 s at 30 fps. Hybrid direction (decide round 1, 2026-10-14): the hook and the rm -rf
+ * beat are seen through the surveillance HUD; everything else is A "Punch". Scenes in Proto.tsx (1-7), Punch.tsx (8-19). */
 import React from 'react';
 import {AbsoluteFill, Audio, staticFile, useCurrentFrame} from 'remotion';
+import {CameraMotionBlur} from '@remotion/motion-blur';
 import {loadFonts} from '../fonts';
-import {P, T} from './common';
-import {Hook} from './Top';
-import {AskBeat} from './Ask';
-import {OrbitBeat} from './Orbit';
-import {Bookend15, End19, Keys7, Net18, Plan11, Question10, Resume6, Reveal4, Risky8, Sounds17, Toast14, Tower12, Usage13, Yours9} from './Beats';
+import {Dramatisation, P} from './common';
+import {Ask, Drop, Hook, Hud, Keys, Reveal, V, shakeFrom} from './Proto';
+import {Ask2, Done, End, Fixed, Listen, Plan2, Risky, Themes, Tower, Wall, Yours, Zero} from './Punch';
 
 loadFonts();
 
-/* Music edit from audio/v5_edit.py; heist-2 until the owner picks a take. */
-const MUSIC = 'audio/v5-heist-2.wav';
+/* Final music: audio/v5_edit.py heist-2, SFX and master by audio/v5_sfx.py film. */
+const MUSIC = 'audio/v5-film.wav';
 
-type Beat = {n: number; from: number; to: number; C?: React.FC<{f: number}>};
-const BEATS: Beat[] = [
-  {n: 1, from: 0, to: 150, C: Hook}, // beats 1-3
-  {n: 4, from: 150, to: 270, C: Reveal4},
-  {n: 5, from: 270, to: 390, C: AskBeat},
-  {n: 6, from: 390, to: 420, C: Resume6},
-  {n: 7, from: 420, to: 510, C: Keys7},
-  {n: 8, from: 510, to: 630, C: Risky8},
-  {n: 9, from: 630, to: 690, C: Yours9},
-  {n: 10, from: 690, to: 780, C: Question10},
-  {n: 11, from: 780, to: 870, C: Plan11},
-  {n: 12, from: 870, to: 990, C: Tower12},
-  {n: 13, from: 990, to: 1080, C: Usage13},
-  {n: 14, from: 1080, to: 1230, C: Toast14},
-  {n: 15, from: 1230, to: 1290, C: Bookend15},
-  {n: 16, from: 1290, to: 1485, C: OrbitBeat},
-  {n: 17, from: 1485, to: 1575, C: Sounds17},
-  {n: 18, from: 1575, to: 1650, C: Net18},
-  {n: 19, from: 1650, to: 1770, C: End19},
+type Scene = {from: number; to: number; C: React.FC<{f: number; v: V}>; v?: V; hud?: boolean};
+const SCENES: Scene[] = [
+  {from: 0, to: 150, C: Hook, v: 'B', hud: true},
+  {from: 150, to: 270, C: Reveal},
+  {from: 270, to: 390, C: Ask},
+  {from: 390, to: 420, C: Drop},
+  {from: 420, to: 510, C: Keys},
+  {from: 510, to: 630, C: Risky, hud: true},
+  {from: 630, to: 690, C: Yours},
+  {from: 690, to: 780, C: Ask2},
+  {from: 780, to: 870, C: Plan2},
+  {from: 870, to: 990, C: Tower},
+  {from: 990, to: 1080, C: Wall},
+  {from: 1080, to: 1230, C: Done},
+  {from: 1230, to: 1290, C: Fixed},
+  {from: 1290, to: 1485, C: Themes},
+  {from: 1485, to: 1575, C: Listen},
+  {from: 1575, to: 1650, C: Zero},
+  {from: 1650, to: 1770, C: End},
 ];
 
-const Todo: React.FC<{n: number}> = ({n}) => (
-  <AbsoluteFill style={{background: P.ground, alignItems: 'center', justifyContent: 'center', fontFamily: T.mono, fontSize: 40, color: P.faint}}>beat {n}</AbsoluteFill>
-);
+/** Shake hits; the same frames carry an SFX hit in audio/v5_sfx.py. */
+export const HITS = [
+  {f: 15, a: 6}, {f: 22, a: 8}, {f: 30, a: 10}, {f: 37, a: 14},
+  {f: 150, a: 26}, {f: 160, a: 10}, {f: 175, a: 10}, {f: 190, a: 14}, {f: 205, a: 10}, {f: 220, a: 16},
+  {f: 390, a: 34}, {f: 420, a: 10}, {f: 450, a: 22}, {f: 462, a: 10}, {f: 480, a: 22}, {f: 492, a: 12},
+  {f: 510, a: 16}, {f: 540, a: 12}, {f: 579, a: 22}, {f: 627, a: 18}, {f: 640, a: 26},
+  {f: 690, a: 10}, {f: 750, a: 14}, {f: 790, a: 10}, {f: 840, a: 16}, {f: 878, a: 14}, {f: 930, a: 16},
+  {f: 990, a: 10}, {f: 1000, a: 12}, {f: 1030, a: 12}, {f: 1110, a: 18}, {f: 1155, a: 12}, {f: 1169, a: 16},
+  {f: 1248, a: 10}, {f: 1268, a: 26}, {f: 1290, a: 30}, {f: 1470, a: 14},
+  {f: 1486, a: 12}, {f: 1493, a: 12}, {f: 1500, a: 14}, {f: 1515, a: 14}, {f: 1530, a: 14}, {f: 1545, a: 16}, {f: 1560, a: 10},
+  {f: 1590, a: 18}, {f: 1650, a: 34},
+];
+/** Frames that get camera motion blur: crash zooms, whips, the zoom through the toast. */
+const BLUR = [[22, 27], [30, 35], [37, 42], [270, 290], [420, 426], [462, 469], [780, 790], [1157, 1170]];
+
+const Frame: React.FC = () => {
+  const f = useCurrentFrame();
+  const sc = SCENES.find((s) => f >= s.from && f < s.to) ?? SCENES[SCENES.length - 1];
+  const sh = shakeFrom(HITS, f, !!sc.hud && !(f >= 120 && f < 150));
+  return (
+    <AbsoluteFill style={{background: P.ground, overflow: 'hidden'}}>
+      <AbsoluteFill style={{transform: `translate(${sh.x}px, ${sh.y}px) rotate(${sh.r}deg) scale(${1 + Math.abs(sh.x) / 900})`}}>
+        <sc.C f={f} v={sc.v ?? 'A'} />
+      </AbsoluteFill>
+      {sc.hud && <Hud f={f} />}
+      {f < 120 && <Dramatisation />}
+    </AbsoluteFill>
+  );
+};
 
 export const Film5: React.FC = () => {
   const f = useCurrentFrame();
-  const b = BEATS.find((x) => f >= x.from && f < x.to) ?? BEATS[BEATS.length - 1];
+  const blur = BLUR.some(([a, b]) => f >= a && f < b);
   return (
     <AbsoluteFill style={{background: P.ground}}>
-      {b.C ? <b.C f={f} /> : <Todo n={b.n} />}
+      {blur ? (
+        <CameraMotionBlur samples={6} shutterAngle={180}>
+          <Frame />
+        </CameraMotionBlur>
+      ) : (
+        <Frame />
+      )}
       <Audio src={staticFile(MUSIC)} />
     </AbsoluteFill>
   );

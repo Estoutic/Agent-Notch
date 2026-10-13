@@ -20,7 +20,7 @@ const Req: React.FC<{f: number; at: number; n: string}> = ({f, at, n}) => (
 );
 
 /** A crop of a 3x snapshot (1.5 px per stage px), shown at k film px per stage px. */
-const Snap: React.FC<{src: string; x0: number; y0: number; x1: number; y1: number; k: number; r?: number; style?: React.CSSProperties; children?: React.ReactNode}> = ({src, x0, y0, x1, y1, k, r = 24, style, children}) => (
+export const Snap: React.FC<{src: string; x0: number; y0: number; x1: number; y1: number; k: number; r?: number; style?: React.CSSProperties; children?: React.ReactNode}> = ({src, x0, y0, x1, y1, k, r = 24, style, children}) => (
   <div style={{position: 'absolute', width: (x1 - x0) * k, height: (y1 - y0) * k, overflow: 'hidden', borderRadius: r * k, boxShadow: '0 40px 90px rgba(0,0,0,0.65)', ...style}}>
     <Img src={staticFile(`snap3/${src}`)} style={{position: 'absolute', left: -x0 * k, top: -y0 * k, width: 1920 * (k / 1.5)}} />
     {children}
@@ -59,7 +59,7 @@ const LOG = [
   '  ✓ reports progress',
   '  ✓ cancels cleanly',
 ];
-const Terminal: React.FC<{lines: {t: string; c?: string}[]; x: number; y: number; w: number; h: number; title: string; font?: number}> = ({lines, x, y, w, h, title, font = 26}) => (
+export const Terminal: React.FC<{lines: {t: string; c?: string}[]; x: number; y: number; w: number; h: number; title: string; font?: number}> = ({lines, x, y, w, h, title, font = 26}) => (
   <div style={{position: 'absolute', left: x, top: y, width: w, height: h, background: '#0E0E11', borderRadius: 18, border: '1px solid #26262B', overflow: 'hidden', boxShadow: '0 40px 90px rgba(0,0,0,0.6)'}}>
     <div style={{height: 46, display: 'flex', alignItems: 'center', gap: 9, padding: '0 18px', background: '#17171A', fontFamily: T.body, fontSize: 18, color: P.dim}}>
       {['#FF5F57', '#FEBC2E', '#28C840'].map((c) => <span key={c} style={{width: 12, height: 12, borderRadius: 6, background: c, opacity: 0.6}} />)}
