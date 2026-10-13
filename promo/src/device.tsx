@@ -43,7 +43,7 @@ const parse = (j: unknown): Corners => {
 };
 const useCorners = (shot: BlenderShot) => {
   const [c, setC] = useState<Corners | null>(cache[shot] ?? null);
-  const [handle] = useState(() => (cache[shot] === undefined ? delayRender(`corners ${shot}`) : null));
+  const [handle] = useState(() => (cache[shot] === undefined ? delayRender(`corners ${shot}`, {retries: 2, timeoutInMilliseconds: 60000}) : null));
   useEffect(() => {
     if (cache[shot] !== undefined) return;
     fetch(staticFile(`blender/${shot}.json`))
