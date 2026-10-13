@@ -1,13 +1,19 @@
 /*
- * Procedural soundtrack + SFX for the films. No samples, no downloaded audio: every sound is computed here.
- * Run: node audio/synth.mts   (Node >= 22.18 strips the types)   -> public/audio/{promo,vertical}.wav
- * The music follows src/timeline.ts: 120 BPM, one beat = 15 frames, sections set per shot.
+ * Soundtrack for the films: the licensed music track, edited to the cut, plus synthesised UI sounds on top.
+ * Run: node audio/synth.mts   (Node >= 22.18 strips the types; ffmpeg on PATH)  -> public/audio/{promo,vertical}.wav
+ *
+ * Music: public/<MUSIC_FILE> (gitignored, never committed). The edit lives in src/timeline.ts (MUSIC, TRACK_*):
+ * every segment is placed sample-accurately on the film's beat grid with 10 ms crossfades. At the final hit the
+ * music stops, a synth impact lands and a reverb tail rings out. Without the file a simple synth bed stands in.
+ * SFX are a separate bus; the music ducks under them. The sum is mastered with two-pass loudnorm to -14 LUFS, TP -1.5.
  */
-import {writeFileSync, mkdirSync} from 'node:fs';
-import {PROMO, VERTICAL, FPS, cues, sections, filmLength, type Shot, type Cue} from '../src/timeline.ts';
+import {writeFileSync, mkdirSync, existsSync, unlinkSync} from 'node:fs';
+import {execFileSync, spawnSync} from 'node:child_process';
+import {PROMO, VERTICAL, FPS, FPB, OFFSET_FRAMES, BPM, cues, sections, filmFrames, MUSIC, MUSIC_FILE, TRACK_DROP_S, TRACK_BPM, type ShotDef, type MusicSeg} from '../src/timeline.ts';
 
+type Cue = {f: number; s: string; d?: number; v?: number; p?: number};
 const SR = 48000;
-const BEAT_S = 0.5;
+const BEAT_S = 60 / BPM;
 const TAU = Math.PI * 2;
 
 /* ---------- deterministic noise ---------- */
@@ -232,6 +238,38 @@ const sfx = (m: Mix, c: Cue, t0: number) => {
       for (let t = 0; t < d; t += 0.055 + rnd() * 0.03) sfx(m, {f: 0, s: 'key', v: v * (0.5 + rnd() * 0.4)}, t0 + t);
       break;
     }
+    case 'approve': {
+      [0, 0.07].forEach((o, k) => m.put(t0 + o, 0.22, (t) => {
+        const f = (k ? 1318.5 : 987.8) * p;
+        return (Math.sin(TAU * f * t) + Math.sin(TAU * f * 2 * t) * 0.2) * Math.min(1, t / 0.003) * Math.exp(-t / 0.07);
+      }, v * 0.3, 0.15, 0.35));
+      break;
+    }
+    case 'deny': {
+      [0, 0.09].forEach((o, k) => {
+        const lp = new Biquad().set('lp', 1800, 0.8);
+        let ph = 0;
+        m.put(t0 + o, 0.2, (t) => { ph += (k ? 233 : 311) / SR; return lp.run(sq(ph) * 0.5 + Math.sin(TAU * ph)) * Math.min(1, t / 0.003) * Math.exp(-t / 0.08); }, v * 0.3, -0.15, 0.25);
+      });
+      break;
+    }
+    case 'glass': {
+      const f = 1567.98 * p;
+      m.put(t0, 1.6, (t) => [1, 2.32, 4.25, 6.63].reduce((s, h, k) => s + Math.sin(TAU * f * h * t + k) * Math.exp(-t / (0.7 / (k + 1))) / (k + 1.2), 0) * Math.min(1, t / 0.001), v * 0.32, 0.2, 0.6);
+      break;
+    }
+    case 'rewind': {
+      const bp = new Biquad();
+      let ph = 0;
+      const len = 0.45;
+      m.put(t0, len, (t, i) => {
+        const x = t / len;
+        if (i % 16 === 0) bp.set('bp', 3200 * Math.pow(0.12, x), 2);
+        ph += (900 * Math.pow(0.2, x)) / SR;
+        return (bp.run(noise()) * 1.2 + saw(ph) * 0.15) * Math.sin(Math.PI * x);
+      }, v * 0.5, 0, 0.3);
+      break;
+    }
     case 'swell': {
       const lp = new Biquad();
       m.put(t0, 0.7, (t, i) => {
@@ -244,9 +282,9 @@ const sfx = (m: Mix, c: Cue, t0: number) => {
 };
 
 /* ---------- reverb (Schroeder) ---------- */
-const reverb = (x: Float32Array, n: number, off: number) => {
+const reverb = (x: Float32Array, n: number, off: number, fb = 0.8) => {
   const out = new Float32Array(n);
-  const combs = [1557, 1617, 1491, 1422].map((d) => ({buf: new Float32Array(d + off), i: 0, fb: 0.8, lp: 0}));
+  const combs = [1557, 1617, 1491, 1422].map((d) => ({buf: new Float32Array(d + off), i: 0, fb, lp: 0}));
   const aps = [225, 556].map((d) => ({buf: new Float32Array(d + off), i: 0}));
   for (let k = 0; k < n; k++) {
     let s = 0;
@@ -270,110 +308,150 @@ const reverb = (x: Float32Array, n: number, off: number) => {
   return out;
 };
 
-/* ---------- music ---------- */
-const CHORDS = [
-  {root: 45, notes: [57, 60, 64, 67]}, // Am7
-  {root: 41, notes: [57, 60, 65, 69]}, // Fmaj7
-  {root: 48, notes: [55, 60, 64, 67]}, // C
-  {root: 43, notes: [55, 59, 62, 67]}, // G
-];
+/* ---------- music: the track, edited ---------- */
+const filmT = (beat: number) => (OFFSET_FRAMES + beat * FPB) / FPS; // exact, not frame-rounded
+const srcT = (beat: number) => TRACK_DROP_S + (beat * 60) / TRACK_BPM;
 
-const music = (m: Mix, shots: Shot[]) => {
-  const secs = sections(shots);
-  const firstDrop = secs.find((s) => s.music === 'drop');
-  const grooveStart = firstDrop ? firstDrop.from + 30 : 0; // the reveal impact
-  const at = (fr: number) => fr / FPS;
-  const beatFrames = 15;
-  const total = filmLength(shots);
-  for (let b = 0; b * beatFrames < total; b++) {
-    const fr = b * beatFrames;
-    const sec = secs.find((s) => fr >= s.from && fr < s.to);
-    if (!sec) continue;
-    const t = at(fr);
-    const kind = sec.music;
-    const gb = Math.floor((fr - grooveStart) / beatFrames); // beats since the groove started
-    const inBar = ((gb % 4) + 4) % 4;
-    const chord = CHORDS[((Math.floor(gb / 4) % 4) + 4) % 4];
-    if (kind === 'pulse' || kind === 'tension') {
-      // clock and heartbeat under the pain
-      tickSnd(m, t, 0.8, b % 2 ? 0.8 : 1);
-      if (kind === 'tension') tickSnd(m, t + BEAT_S / 2, 0.35, 0.7);
-      if (b % 4 === 0) { thump(m, t, 0.9); thump(m, t + 0.2, 0.6); }
-      if (b % 8 === 0 || fr === sec.from) {
-        const len = Math.min(4 * BEAT_S * 2, (sec.to - fr) / FPS + 0.3);
-        m.put(t, len, (x) => (Math.sin(TAU * 55 * x) * 0.5 + Math.sin(TAU * 110.4 * x) * 0.18 + Math.sin(TAU * 164.8 * x) * 0.08) * Math.min(1, x / 0.3) * Math.min(1, (len - x) / 0.3), 0.5, 0, 0.3);
-      }
-    }
-    if ((kind === 'drop' || kind === 'montage') && fr >= grooveStart) {
-      kick(m, t, 0.95);
-      if (inBar === 1 || inBar === 3) clap(m, t, 0.7);
-      for (let s = 0; s < 4; s++) hat(m, t + (s * BEAT_S) / 4, false, s === 2 ? 0.8 : 0.45, s % 2 ? 0.3 : 0.2);
-      hat(m, t + BEAT_S / 2, true, 0.35, -0.25);
-      // bass: 8ths, octave on the off-beat
-      bassNote(m, t, mtof(chord.root - 12 + 12), BEAT_S / 2 - 0.02, 0.9);
-      bassNote(m, t + BEAT_S / 2, mtof(chord.root + (inBar === 3 ? 12 : 0)), BEAT_S / 2 - 0.02, 0.8);
-      if (inBar === 0) padChord(m, t, chord.notes, 4 * BEAT_S + 0.1, 1, kind === 'montage' ? 1.8 : 1);
-      // arp: 16ths over the chord, brighter in the montage
-      const arp = [...chord.notes, chord.notes[1] + 12];
-      for (let s = 0; s < 4; s++) {
-        const n = arp[(gb * 4 + s) % arp.length] + 12;
-        pluck(m, t + (s * BEAT_S) / 4, n, kind === 'montage' ? 1.25 : 0.7, s % 2 ? 0.4 : -0.4);
-      }
-      if (fr === grooveStart || (fr === sec.from && kind === 'montage')) {
-        // crash
-        const hp = new Biquad().set('hp', 3500, 0.7);
-        m.put(t, 2.4, (x) => hp.run(noise()) * Math.exp(-x / 0.7), 0.5, 0, 0.4);
-      }
-    }
-    if (kind === 'break') {
-      if (inBar === 0 || fr === sec.from) padChord(m, t, chord.notes, 4 * BEAT_S + 0.1, 1.3, 0.8);
-      if (inBar === 0) kick(m, t, 0.5);
-      if (b % 2 === 0) pluck(m, t, chord.notes[(b / 2) % 4] + 12, 0.6, 0);
-    }
-    if (kind === 'outro' && fr === sec.from) {
-      padChord(m, t, [57, 60, 64, 67, 71], (sec.to - fr) / FPS + 1.5, 1.6, 1.1);
-      bassNote(m, t, mtof(33), 2.5, 0.8);
-      [0, 1, 2, 3, 4, 5, 6, 7].forEach((k) => pluck(m, t + 0.5 + k * 0.25, [69, 72, 76, 79, 81, 79, 76, 72][k], 0.5 * (1 - k / 10), k % 2 ? 0.4 : -0.4));
+const decode = (file: string): Bus | null => {
+  if (!existsSync(file)) return null;
+  const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-f', 'f32le', '-ac', '2', '-ar', String(SR), '-'], {maxBuffer: 1 << 30});
+  const n = raw.length / 8;
+  const f = new Float32Array(raw.buffer, raw.byteOffset, n * 2);
+  const out = bus(n);
+  for (let k = 0; k < n; k++) { out.L[k] = f[2 * k]; out.R[k] = f[2 * k + 1]; }
+  return out;
+};
+
+/** Copies track [s0, s0 + len) to film time t0 with raised-cosine fades (fi, fo seconds) at the ends. */
+const place = (dst: Bus, src: Bus, t0: number, s0: number, len: number, fi: number, fo: number) => {
+  const a = Math.round(t0 * SR), b = Math.round(s0 * SR), n = Math.round(len * SR);
+  const ni = Math.max(1, Math.round(fi * SR)), no = Math.max(1, Math.round(fo * SR));
+  for (let i = 0; i < n; i++) {
+    const k = a + i, j = b + i;
+    if (k < 0 || j < 0) continue;
+    if (k >= dst.L.length || j >= src.L.length) break;
+    const g = (i < ni ? 0.5 - 0.5 * Math.cos((Math.PI * i) / ni) : 1) * (i > n - no ? 0.5 - 0.5 * Math.cos((Math.PI * (n - i)) / no) : 1);
+    dst.L[k] += src.L[j] * g; dst.R[k] += src.R[j] * g;
+  }
+};
+
+const XF = 0.01; // crossfade at every cut
+const editTrack = (dst: Bus, track: Bus, segs: MusicSeg[], hit: number) => {
+  const pts: string[] = [];
+  segs.forEach((s, i) => {
+    const prev = segs[i - 1], next = segs[i + 1];
+    const joinedIn = prev && prev.to === s.from, joinedOut = next && next.from === s.to;
+    let t0 = filmT(s.from), s0 = srcT(s.src);
+    const t1 = filmT(s.to);
+    if (s.from === 0) { s0 -= t0; t0 = 0; } // the film starts a few frames before beat 0
+    const pre = joinedIn ? XF / 2 : 0, post = joinedOut ? XF / 2 : 0;
+    const fi = s.from === 0 ? 0.08 : joinedIn ? XF : 0.004;
+    const fo = s.to === hit ? 0.03 : joinedOut ? XF : 0.012;
+    place(dst, track, t0 - pre, s0 - pre, t1 - t0 + pre + post, fi, fo);
+    pts.push(`film ${t0.toFixed(3)}-${t1.toFixed(3)} s <- track ${s0.toFixed(3)}-${(s0 + t1 - t0).toFixed(3)} s`);
+  });
+  return pts;
+};
+
+/* ---------- fallback bed when the track is missing ---------- */
+const CHORDS = [[57, 60, 64, 67], [57, 60, 65, 69], [55, 60, 64, 67], [55, 59, 62, 67]];
+const bed = (m: Mix, shots: ShotDef[], hit: number) => {
+  for (const sec of sections(shots)) {
+    for (let b = sec.fromBeat; b < sec.toBeat && b < hit; b++) {
+      const t = filmT(b);
+      if (sec.music === 'intro') { tickSnd(m, t, 0.8); if (b % 4 === 0) thump(m, t, 0.8); continue; }
+      if (sec.music === 'stop') continue;
+      const chord = CHORDS[Math.floor(b / 4) % 4];
+      if (b % 4 === 0) padChord(m, t, chord, 4 * BEAT_S + 0.1, 1, sec.music === 'bright' ? 1.8 : 1);
+      if (sec.music === 'dark' || sec.music === 'breakdown') { if (b % 2 === 0) pluck(m, t, chord[(b / 2) % 4] + 12, 0.6); continue; }
+      kick(m, t, 0.9);
+      if (b % 2) clap(m, t, 0.6);
+      for (let s = 0; s < 4; s++) hat(m, t + (s * BEAT_S) / 4, false, s === 2 ? 0.8 : 0.45);
+      bassNote(m, t, mtof(chord[0] - 24), BEAT_S / 2 - 0.02, 0.8);
+      bassNote(m, t + BEAT_S / 2, mtof(chord[0] - 12), BEAT_S / 2 - 0.02, 0.7);
     }
   }
 };
 
 /* ---------- render ---------- */
-const render = (shots: Shot[], V: boolean, file: string) => {
-  seed = 7;
-  const tail = 0.5;
-  const dur = filmLength(shots) / FPS;
-  const n = Math.round((dur + tail) * SR);
-  const m = new Mix(n);
-  music(m, shots);
-  for (const c of cues(shots, V)) sfx(m, c, c.f / FPS);
-  const wetL = reverb(m.wet.L, n, 0), wetR = reverb(m.wet.R, n, 23);
-  const outN = Math.round(dur * SR);
-  const L = new Float32Array(outN), R = new Float32Array(outN);
-  let peak = 0;
-  for (let k = 0; k < outN; k++) {
-    // gentle bus saturation
-    L[k] = Math.tanh((m.dry.L[k] + wetL[k] * 0.9) * 0.6);
-    R[k] = Math.tanh((m.dry.R[k] + wetR[k] * 0.9) * 0.6);
-    peak = Math.max(peak, Math.abs(L[k]), Math.abs(R[k]));
-  }
-  const fadeOut = Math.round(0.6 * SR);
-  const target = Math.pow(10, -2.5 / 20) / peak;
-  const buf = Buffer.alloc(44 + outN * 4);
-  buf.write('RIFF', 0); buf.writeUInt32LE(36 + outN * 4, 4); buf.write('WAVE', 8);
-  buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22);
-  buf.writeUInt32LE(SR, 24); buf.writeUInt32LE(SR * 4, 28); buf.writeUInt16LE(4, 32); buf.writeUInt16LE(16, 34);
-  buf.write('data', 36); buf.writeUInt32LE(outN * 4, 40);
-  for (let k = 0; k < outN; k++) {
-    const f = k > outN - fadeOut ? (outN - k) / fadeOut : 1;
-    buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, L[k] * target * f)) * 32767), 44 + k * 4);
-    buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, R[k] * target * f)) * 32767), 46 + k * 4);
-  }
+const writeWav = (file: string, L: Float32Array, R: Float32Array) => {
+  const n = L.length;
+  const buf = Buffer.alloc(44 + n * 8);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 8, 4); buf.write('WAVE', 8);
+  buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(3, 20); buf.writeUInt16LE(2, 22);
+  buf.writeUInt32LE(SR, 24); buf.writeUInt32LE(SR * 8, 28); buf.writeUInt16LE(8, 32); buf.writeUInt16LE(32, 34);
+  buf.write('data', 36); buf.writeUInt32LE(n * 8, 40);
+  for (let k = 0; k < n; k++) { buf.writeFloatLE(L[k], 44 + k * 8); buf.writeFloatLE(R[k], 48 + k * 8); }
   writeFileSync(file, buf);
-  console.log(`${file}: ${dur.toFixed(2)} s, peak before normalize ${peak.toFixed(3)}`);
+};
+
+const LUFS = -14, TP = -1.5;
+const measure = (file: string, extra = '') => {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', file, '-af', `${extra}loudnorm=I=${LUFS}:TP=${TP}:LRA=11:print_format=json`, '-f', 'null', '-'], {encoding: 'utf8', maxBuffer: 1 << 26}).stderr;
+  return JSON.parse(r.slice(r.lastIndexOf('{'), r.lastIndexOf('}') + 1));
+};
+
+const render = (shots: ShotDef[], segs: MusicSeg[], hit: number, file: string) => {
+  seed = 7;
+  const dur = filmFrames(shots) / FPS;
+  const n = Math.round(dur * SR);
+  const sfxMix = new Mix(n);
+  const mus = bus(n);
+  const track = decode(new URL(`../public/${MUSIC_FILE}`, import.meta.url).pathname);
+  let edit: string[] = [];
+  const hitT = filmT(hit);
+  if (track) edit = editTrack(mus, track, segs, hit);
+  else {
+    const m2 = new Mix(n);
+    bed(m2, shots, hit);
+    const wl = reverb(m2.wet.L, n, 0), wr = reverb(m2.wet.R, n, 23);
+    for (let k = 0; k < n; k++) { mus.L[k] = Math.tanh((m2.dry.L[k] + wl[k] * 0.9) * 0.6) * 0.5; mus.R[k] = Math.tanh((m2.dry.R[k] + wr[k] * 0.9) * 0.6) * 0.5; }
+    edit = ['(no track: synth bed)'];
+  }
+  // reverb tail: the last beat of music before the hit rings on past the cut
+  const tailIn = bus(n);
+  const k0 = Math.round((hitT - BEAT_S) * SR), k1 = Math.round(hitT * SR);
+  for (let k = Math.max(0, k0); k < Math.min(n, k1 + 1200); k++) {
+    const g = Math.min(1, (k - k0) / (0.1 * SR));
+    tailIn.L[k] = mus.L[k] * g; tailIn.R[k] = mus.R[k] * g;
+  }
+  const tl = reverb(tailIn.L, n, 0, 0.9), tr = reverb(tailIn.R, n, 31, 0.9);
+  // the closing hit: a low sustained chord swell under the impact
+  sfxMix.put(hitT, dur - hitT, (t) => {
+    const a = Math.min(1, t / 0.02) * Math.exp(-t / 1.1);
+    return (Math.sin(TAU * 55 * t) * 0.6 + Math.sin(TAU * 110 * t) * 0.3 + Math.sin(TAU * 164.8 * t) * 0.12) * a;
+  }, 0.5, 0, 0.5);
+  for (const c of cues(shots)) sfx(sfxMix, c as Cue, c.f / FPS);
+  const wetL = reverb(sfxMix.wet.L, n, 0), wetR = reverb(sfxMix.wet.R, n, 23);
+  const sL = new Float32Array(n), sR = new Float32Array(n);
+  for (let k = 0; k < n; k++) { sL[k] = Math.tanh((sfxMix.dry.L[k] + wetL[k] * 0.9) * 0.6); sR[k] = Math.tanh((sfxMix.dry.R[k] + wetR[k] * 0.9) * 0.6); }
+  // duck: follow the SFX level (5 ms attack, 180 ms release), pull the music down up to 6 dB
+  const att = Math.exp(-1 / (0.005 * SR)), rel = Math.exp(-1 / (0.18 * SR));
+  let e = 0;
+  const L = new Float32Array(n), R = new Float32Array(n);
+  const MUS = 0.85, SFX = 0.75;
+  const fadeN = Math.round(0.5 * SR);
+  for (let k = 0; k < n; k++) {
+    const x = Math.max(Math.abs(sL[k]), Math.abs(sR[k]));
+    e = x > e ? att * e + (1 - att) * x : rel * e + (1 - rel) * x;
+    const duck = 1 - 0.5 * Math.min(1, e / 0.25);
+    const end = k > n - fadeN ? (n - k) / fadeN : 1;
+    L[k] = ((mus.L[k] + tl[k] * 0.6) * MUS * duck + sL[k] * SFX) * end;
+    R[k] = ((mus.R[k] + tr[k] * 0.6) * MUS * duck + sR[k] * SFX) * end;
+  }
+  const tmp = file.replace(/\.wav$/, '.raw.wav');
+  writeWav(tmp, L, R);
+  const m1 = measure(tmp);
+  const ln = `loudnorm=I=${LUFS}:TP=${TP}:LRA=11:measured_I=${m1.input_i}:measured_TP=${m1.input_tp}:measured_LRA=${m1.input_lra}:measured_thresh=${m1.input_thresh}:offset=${m1.target_offset}:linear=true`;
+  const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', tmp, '-af', `${ln},aresample=${SR}`, '-c:a', 'pcm_s16le', '-ar', String(SR), file]);
+  if (r.status !== 0) throw new Error(`ffmpeg master failed: ${r.stderr}`);
+  unlinkSync(tmp);
+  const m2 = measure(file);
+  console.log(`${file}: ${dur.toFixed(2)} s · ${m2.input_i} LUFS · TP ${m2.input_tp} dBTP · LRA ${m2.input_lra}`);
+  console.log(`  music edit (hit at film ${hitT.toFixed(3)} s):\n  ` + edit.join('\n  '));
 };
 
 const out = new URL('../public/audio/', import.meta.url).pathname;
 mkdirSync(out, {recursive: true});
-render(PROMO, false, out + 'promo.wav');
-render(VERTICAL, true, out + 'vertical.wav');
+render(PROMO, MUSIC.promo, MUSIC.promoHit, out + 'promo.wav');
+render(VERTICAL, MUSIC.vertical, MUSIC.verticalHit, out + 'vertical.wav');

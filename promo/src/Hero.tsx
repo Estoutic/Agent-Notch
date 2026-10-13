@@ -1,48 +1,62 @@
+/* Seamless 9 s loop for the README: a mark turns amber, click the notch, Allow, green, the list closes. */
 import React from 'react';
-import {AbsoluteFill, spring, useCurrentFrame} from 'remotion';
-import {C, Caption, Cursor, Keycap, Ripple, State, camAt, cursorState, range, win} from './lib';
-import {ASK_WING, Laptop, Panel, World} from './world';
+import {AbsoluteFill, Img, spring} from 'remotion';
+import icon from '../../assets/icon-1024.png';
+import {loadFonts, DISPLAY} from './fonts';
+import {C, Cursor, Ripple, State, camAt, cursorPath, range, toScreen, useV} from './lib';
+import {useCurrentFrame} from 'remotion';
+import {AttnRow, Collapse, Header, ListRow, PanelBox, Request} from './ui/app';
+import {layoutWing} from './world';
+import {Desk} from './scenes/common';
+import {J_WING} from './scenes/Open';
 
-
-/* 9 s seamless loop for the README: calm -> two agents wait -> approve from the notch -> calm. */
+loadFonts();
 export const HERO_LEN = 270;
-const CLOSE = {s: 3.4, fx: 743, fy: 32, ax: 960, ay: 400};
+const T = {wait: 24, click: 78, allow: 138, close: 176};
+
 export const Hero: React.FC = () => {
   const f = useCurrentFrame();
-  const cam = camAt(f, [
-    {f: 0, ...CLOSE},
-    {f: 66, ...CLOSE, s: 3.6},
-    {f: 94, s: 1.0, fx: 780, fy: 0, ax: 960, ay: 130},
-    {f: 186, s: 1.0, fx: 780, fy: 0, ax: 960, ay: 130},
-    {f: 222, ...CLOSE},
-  ]);
-  const reveal = spring({frame: f - 80, fps: 30, config: {damping: 20, stiffness: 150, mass: 0.9}}) * (1 - range(f, 180, 194));
-  const codexOk = f >= 152, claudeOk = f >= 176;
-  const waiting = (i: number) => f >= 20 && ((i === 2 && !codexOk) || (i === 0 && !claudeOk));
-  const state = (i: number): State => (waiting(i) ? 'waiting' : 'working');
-  const blink = (i: number) => (waiting(i) ? 0.5 + 0.5 * Math.cos(((f - 20) / 30) * Math.PI * 2 * 1.2) : 1);
-  const rings = f >= 20 && f < 80 ? [0, 2].map((i) => ({i, t: ((f - 20 + i * 10) % 40) / 40, color: C.yellow})) : [];
-  const cur = cursorState(f, 120, 146, 150, {x: 860, y: 720}, {x: 501, y: 474}, 166);
-  const kp = range(f, 173, 176) * (1 - range(f, 180, 186));
-  const kOp = win(f, 160, 200, 8, 10);
+  const {W} = useV();
+  const cam = camAt(f, [{f: 0, s: 1.6, fx: 780, fy: 300, ax: W / 2 - 40, ay: 520}]);
+  const L = layoutWing(J_WING);
+  const notch = toScreen(cam, L.marks[0].cx + 50, 32);
+  const allowBtn = toScreen(cam, 456 + 70, 160 + 12 + 34 + 4 + 28 + 6 + 18);
+  const rest = {x: notch.x + 520, y: notch.y + 700};
+  const cur = cursorPath(f, [
+    {from: T.wait + 14, arrive: T.click - 2, a: rest, b: notch, click: T.click},
+    {from: T.click + 14, arrive: T.allow - 4, a: notch, b: allowBtn, click: T.allow},
+    {from: T.allow + 16, arrive: T.close + 30, a: allowBtn, b: rest},
+  ], T.close + 22);
+  const waiting = f >= T.wait && f < T.allow + 1;
+  const allowed = f >= T.allow + 1;
+  const open = spring({frame: f - T.click - 1, fps: 30, config: {damping: 20, stiffness: 170, mass: 0.8}});
+  const reveal = open * (1 - range(f, T.close, T.close + 9));
+  const state = (i: number): State => (i === 0 ? (waiting ? 'waiting' : 'working') : J_WING[i].st === 'waiting' ? 'working' : J_WING[i].st);
   return (
     <AbsoluteFill>
-      <World cam={cam}>
-        <Laptop clock="Tue 14:25" calm={1}
-          wing={{items: ASK_WING, state, blink, rings: [...rings, {i: 2, t: range(f, 152, 182, (t) => t), color: C.green}, {i: 0, t: range(f, 176, 206, (t) => t), color: C.green}],
-            glow: (i) => (waiting(i) && f < 80 ? 0.8 : 0)}}
-          over={<>
-            <Panel layers={[{shot: 'ask', o: 1}]} reveal={reveal} spot={{y0: 380, y1: 504, a: win(f, 104, 176, 10, 10)}} />
-            <Ripple x={cur.x} y={cur.y} t={cur.ripple} r={30} />
-            <Cursor x={cur.x} y={cur.y} press={cur.press} opacity={cur.op} size={40} />
-          </>} />
-      </World>
-      <Caption frame={f} from={22} to={76} y={720} size={92} segs={[{t: 'Two agents are'}, {t: 'waiting.', c: C.yellow}]} />
-      <Caption frame={f} from={100} to={206} y={900} size={80} segs={[{t: 'Approve from'}, {t: 'the notch.'}]} />
-      <Caption frame={f} from={210} to={262} y={760} size={80} segs={[{t: 'Agent Notch.'}, {t: 'Every agent, one notch.', c: '#a1a1a8'}]} />
-      <div style={{position: 'absolute', right: 120, top: 560, display: 'flex', gap: 14, opacity: kOp}}>
-        <Keycap pressed={kp} size={76}>⌃</Keycap><Keycap pressed={kp} size={76}>⌥</Keycap><Keycap pressed={kp} size={76}>Y</Keycap>
-      </div>
+      <Desk f={f} cam={cam} screen={{clock: 'Tue 14:25', wing: {items: J_WING, state, glow: (i) => (i === 0 && waiting ? 0.6 : 0),
+        rings: [{i: 0, t: range(f, T.wait, T.wait + 20, (t) => t), color: C.amber}, {i: 0, t: range(f, T.allow + 1, T.allow + 22, (t) => t), color: C.green}]},
+        over: (
+          <PanelBox reveal={reveal}>
+            <Header claude={3} codex={1} waiting={allowed ? 0 : 1} right="wedding-app" />
+            <Collapse t={range(f, T.allow + 3, T.allow + 12)} h={132}>
+              <AttnRow v="claude" st="waiting" title="fix/upload-compress" flash={{color: C.green, a: 0.25 * range(f, T.allow, T.allow + 2) * (1 - range(f, T.allow + 2, T.allow + 10))}}>
+                <Request tool="Bash" cmd={['pnpm --filter api test']} hint always hot="allow" hotA={range(f, T.allow - 8, T.allow - 3)} press={cur.press} />
+              </AttnRow>
+            </Collapse>
+            <ListRow v="claude" st={allowed ? 'working' : 'waiting'} title="fix/upload-compress" model="opus" />
+            <ListRow v="claude" st="working" title="Explore · routes" model="haiku" light depth={1} last />
+            <ListRow v="codex" st="working" title="CONF-360" model="sol" />
+            <ListRow v="claude" st="working" title="docs/upload" model="sonnet" />
+          </PanelBox>
+        )}}>
+        <Ripple x={cur.x} y={cur.y} t={cur.ripple} r={30} />
+        <Cursor x={cur.x} y={cur.y} press={cur.press} opacity={cur.op} size={46} />
+        <div style={{position: 'absolute', right: 70, bottom: 60, display: 'flex', alignItems: 'center', gap: 22}}>
+          <Img src={icon} style={{width: 76, height: 76, borderRadius: 17}} />
+          <span style={{fontFamily: DISPLAY, fontWeight: 650, fontSize: 64, letterSpacing: -2.4, color: C.text}}>Agent Notch</span>
+        </div>
+      </Desk>
     </AbsoluteFill>
   );
 };

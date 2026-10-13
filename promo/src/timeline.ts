@@ -1,193 +1,243 @@
 /*
- * The cut list of every film, shared by the React scenes (src/Film.tsx) and the synth (audio/synth.ts).
- * 30 fps, 120 BPM: one beat = 15 frames, one bar = 60 frames. Shot lengths are whole beats (or eighths in the
- * theme montage), so every cut lands on the grid and the music stays in step with the picture.
- * Plain TypeScript with erasable types only: Node runs this file directly (type stripping) for the synth.
+ * THE timeline of every film: cuts, in-shot events and sound effects, all in musical time.
+ *
+ * Everything is written in beats. Two numbers turn beats into frames:
+ *   BPM            tempo of the music track (placeholder bed: 120)
+ *   OFFSET_FRAMES  frame of the track's first downbeat (beat 0) from the start of the film
+ * Re-timing the edit to a new track = measure its tempo and first downbeat, change these two numbers,
+ * run `node audio/synth.mts`, render. NUDGE moves a single cut by a few frames if a section drifts.
+ *
+ * Plain TypeScript with erasable types only: Node runs this file directly for the synth.
  */
 export const FPS = 30;
-export const BEAT = 15;
+/** Tempo of the music track (Suno take v1, measured with librosa: 123.05 BPM, beat interval 0.4876 s ± 0.009). */
+export const BPM = 123.05;
+/** Film beat 10 (the reveal, the drop) lands at exactly 5.0 s: 150 frames - 10 beats. */
+export const OFFSET_FRAMES = 150 - (10 * FPS * 60) / BPM;
 
 export type ShotId =
-  | 'chaos' | 'buried' | 'clock' | 'slam1' | 'slam2'
-  | 'reveal' | 'legend' | 'kinds'
-  | 'open' | 'list' | 'usage' | 'jump'
-  | 'ask' | 'keys' | 'risky' | 'qp' | 'trust'
-  | 'card' | 'themes' | 'themeMarks' | 'sounds' | 'toast' | 'presets' | 'everywhere'
-  | 'outro' | 'end';
+  | 'cascade' | 'freeze' | 'you' | 'reveal' | 'approve' | 'title'
+  | 'states' | 'anatomy' | 'open'
+  | 'usage' | 'jump'
+  | 'keys' | 'risky' | 'question' | 'plan' | 'trust'
+  | 'card' | 'toast'
+  | 'themes' | 'sounds' | 'presets'
+  | 'hosts' | 'local' | 'end';
 
-/** Music under a shot. */
-export type Music = 'pulse' | 'tension' | 'stop' | 'drop' | 'break' | 'montage' | 'outro';
-/** How the shot comes in. */
-export type Enter = 'cut' | 'whipL' | 'whipR' | 'whipU' | 'flash' | 'zoom' | 'glitch';
-export type Shot = {id: ShotId; len: number; music: Music; enter?: Enter};
+/** Per-cut nudges in frames (positive = later), applied to the start of the named shot. */
+export const NUDGE: Partial<Record<ShotId, number>> = {};
 
-export const PROMO: Shot[] = [
-  {id: 'chaos', len: 60, music: 'pulse'},
-  {id: 'buried', len: 75, music: 'pulse', enter: 'zoom'},
-  {id: 'clock', len: 60, music: 'tension', enter: 'cut'},
-  {id: 'slam1', len: 60, music: 'stop', enter: 'cut'},
-  {id: 'slam2', len: 45, music: 'stop', enter: 'cut'},
-  {id: 'reveal', len: 105, music: 'drop', enter: 'glitch'},
-  {id: 'legend', len: 90, music: 'drop', enter: 'whipU'},
-  {id: 'kinds', len: 60, music: 'drop', enter: 'zoom'},
-  {id: 'open', len: 60, music: 'drop', enter: 'whipL'},
-  {id: 'list', len: 60, music: 'drop', enter: 'cut'},
-  {id: 'usage', len: 60, music: 'drop', enter: 'whipL'},
-  {id: 'jump', len: 60, music: 'drop', enter: 'whipR'},
-  {id: 'ask', len: 75, music: 'drop', enter: 'flash'},
-  {id: 'keys', len: 60, music: 'drop', enter: 'cut'},
-  {id: 'risky', len: 75, music: 'drop', enter: 'glitch'},
-  {id: 'qp', len: 90, music: 'drop', enter: 'whipL'},
-  {id: 'trust', len: 75, music: 'break', enter: 'cut'},
-  {id: 'card', len: 60, music: 'drop', enter: 'zoom'},
-  {id: 'themes', len: 120, music: 'montage', enter: 'flash'},
-  {id: 'themeMarks', len: 45, music: 'montage', enter: 'cut'},
-  {id: 'sounds', len: 60, music: 'drop', enter: 'whipU'},
-  {id: 'toast', len: 60, music: 'drop', enter: 'whipL'},
-  {id: 'presets', len: 45, music: 'drop', enter: 'cut'},
-  {id: 'everywhere', len: 60, music: 'drop', enter: 'whipR'},
-  {id: 'outro', len: 45, music: 'stop', enter: 'cut'},
-  {id: 'end', len: 120, music: 'outro', enter: 'flash'},
+export const FPB = (FPS * 60) / BPM; // frames per beat (15 at 120 BPM)
+/** Absolute frame of an absolute beat. */
+export const beatFrame = (beat: number) => Math.round(OFFSET_FRAMES + beat * FPB);
+
+/** Music under a shot: the section map the Suno prompt asks for (see README). */
+export type Section = 'intro' | 'stop' | 'drop' | 'grooveA' | 'dark' | 'grooveB' | 'breakdown' | 'bright' | 'final';
+export type ShotDef = {id: ShotId; beats: number; music: Section};
+
+/*
+ * Landscape cut. Film beats in brackets; the music sections of the Suno take sit on them (see MUSIC below):
+ * intro [0-8] · dead stop [8-10] · drop [10] · groove [10-50] · dark breakdown [50-58] · groove [58-85]
+ * · breakdown [85-94] · brightest [94-118] · final hit and ring-out [118-122].
+ */
+export const PROMO: ShotDef[] = [
+  {id: 'cascade', beats: 4, music: 'intro'},
+  {id: 'freeze', beats: 4, music: 'intro'},
+  {id: 'you', beats: 2, music: 'stop'},
+  {id: 'reveal', beats: 4, music: 'drop'},
+  {id: 'approve', beats: 5, music: 'grooveA'},
+  {id: 'title', beats: 3, music: 'grooveA'},
+  {id: 'states', beats: 5, music: 'grooveA'},
+  {id: 'anatomy', beats: 6, music: 'grooveA'},
+  {id: 'open', beats: 4, music: 'grooveA'},
+  {id: 'usage', beats: 4, music: 'grooveA'},
+  {id: 'jump', beats: 4, music: 'grooveA'},
+  {id: 'keys', beats: 5, music: 'grooveA'},
+  {id: 'risky', beats: 8, music: 'dark'},
+  {id: 'question', beats: 6, music: 'grooveB'},
+  {id: 'plan', beats: 8, music: 'grooveB'},
+  {id: 'card', beats: 9, music: 'grooveB'},
+  {id: 'toast', beats: 4, music: 'grooveB'},
+  {id: 'trust', beats: 5, music: 'breakdown'},
+  {id: 'sounds', beats: 4, music: 'breakdown'},
+  {id: 'themes', beats: 8, music: 'bright'},
+  {id: 'presets', beats: 4, music: 'bright'},
+  {id: 'hosts', beats: 4, music: 'bright'},
+  {id: 'local', beats: 3, music: 'bright'},
+  {id: 'end', beats: 9, music: 'final'},
 ];
 
-export const VERTICAL: Shot[] = [
-  {id: 'chaos', len: 60, music: 'pulse'},
-  {id: 'buried', len: 60, music: 'pulse', enter: 'zoom'},
-  {id: 'slam1', len: 60, music: 'stop', enter: 'cut'},
-  {id: 'slam2', len: 45, music: 'stop', enter: 'cut'},
-  {id: 'reveal', len: 105, music: 'drop', enter: 'glitch'},
-  {id: 'legend', len: 90, music: 'drop', enter: 'whipU'},
-  {id: 'open', len: 60, music: 'drop', enter: 'whipL'},
-  {id: 'ask', len: 75, music: 'drop', enter: 'flash'},
-  {id: 'keys', len: 60, music: 'drop', enter: 'cut'},
-  {id: 'risky', len: 75, music: 'drop', enter: 'glitch'},
-  {id: 'trust', len: 75, music: 'break', enter: 'cut'},
-  {id: 'card', len: 60, music: 'drop', enter: 'zoom'},
-  {id: 'themes', len: 120, music: 'montage', enter: 'flash'},
-  {id: 'everywhere', len: 60, music: 'drop', enter: 'whipR'},
-  {id: 'end', len: 120, music: 'outro', enter: 'flash'},
+/** Phone cut: the same journey, shorter, every layout re-framed for 9:16. The music is edited to fit (MUSIC.vertical). */
+export const VERTICAL: ShotDef[] = [
+  {id: 'cascade', beats: 4, music: 'intro'},
+  {id: 'freeze', beats: 4, music: 'intro'},
+  {id: 'you', beats: 2, music: 'stop'},
+  {id: 'reveal', beats: 4, music: 'drop'},
+  {id: 'approve', beats: 5, music: 'grooveA'},
+  {id: 'title', beats: 3, music: 'grooveA'},
+  {id: 'states', beats: 5, music: 'grooveA'},
+  {id: 'anatomy', beats: 6, music: 'grooveA'},
+  {id: 'keys', beats: 5, music: 'grooveA'},
+  {id: 'risky', beats: 8, music: 'dark'},
+  {id: 'question', beats: 6, music: 'grooveB'},
+  {id: 'card', beats: 9, music: 'grooveB'},
+  {id: 'toast', beats: 5, music: 'grooveB'},
+  {id: 'trust', beats: 5, music: 'breakdown'},
+  {id: 'themes', beats: 8, music: 'bright'},
+  {id: 'end', beats: 9, music: 'final'},
 ];
 
-export const filmLength = (shots: Shot[]) => shots.reduce((s, x) => s + x.len, 0);
-export const starts = (shots: Shot[]) => {
-  let at = 0;
-  return shots.map((s) => {
-    const from = at;
-    at += s.len;
-    return from;
-  });
+/*
+ * Music edit: which part of the track plays under which film beats. Sample-accurate in audio/synth.mts, with short
+ * crossfades at every cut. `src` is a beat of the track counted from its drop (negative = before the drop).
+ * A new take drops in by changing MUSIC_FILE, the four TRACK_* numbers and, if its sections moved, the src beats.
+ */
+export const MUSIC_FILE = 'music-suno-v1.wav';
+/** Track second of the drop (the first downbeat of the full groove). */
+export const TRACK_DROP_S = 16.3;
+export const TRACK_BPM = BPM;
+/** Track sections in beats from the drop, measured (RMS per beat): dark 40-47, breakdown 75-83, brightest 84-107, breakdown from 108. */
+export const TRACK_SECTIONS = {dark: 40, groove2: 48, breakdown: 75, bright: 84, outro: 108};
+export type MusicSeg = {from: number; to: number; src: number};
+/** Film beats [from, to) play the track from beat `src`. Gaps are silence; after the last segment the synth adds the final hit. */
+export const MUSIC: {promo: MusicSeg[]; vertical: MusicSeg[]; promoHit: number; verticalHit: number} = {
+  promo: [
+    {from: 0, to: 8, src: -10}, // the build before the drop
+    // 8-10: dead stop ("You.")
+    {from: 10, to: 118, src: 0}, // from the drop, continuous, to the start of the track's outro breakdown
+  ],
+  promoHit: 118,
+  vertical: [
+    {from: 0, to: 8, src: -10},
+    {from: 10, to: 38, src: 0}, // drop + groove
+    {from: 38, to: 66, src: 40}, // dark breakdown (risky), then the groove after it
+    {from: 66, to: 71, src: 79}, // the end of the breakdown and its pickup
+    {from: 71, to: 79, src: 84}, // the brightest section (themes)
+    {from: 79, to: 84, src: 103}, // its last bar, into the boundary
+  ],
+  verticalHit: 84,
 };
 
-/* ---------- sound effects, in frames relative to the start of each shot ---------- */
-export type Sfx = 'whoosh' | 'impact' | 'boom' | 'click' | 'dclick' | 'key' | 'tick' | 'pop' | 'glitch' | 'riser' | 'thud' | 'beep' | 'chime' | 'buzz' | 'type' | 'swell';
-export type Cue = {f: number; s: Sfx; d?: number; v?: number; p?: number};
+export type Placed = ShotDef & {startBeat: number; from: number; to: number};
+/** Shots with absolute beats and frames. The first shot starts at frame 0 and absorbs OFFSET_FRAMES. */
+export const place = (shots: ShotDef[]): Placed[] => {
+  let b = 0;
+  const raw = shots.map((s) => {
+    const startBeat = b;
+    b += s.beats;
+    return {...s, startBeat};
+  });
+  return raw.map((s, i) => {
+    const from = i === 0 ? 0 : beatFrame(s.startBeat) + (NUDGE[s.id] ?? 0);
+    const next = raw[i + 1];
+    const to = next ? beatFrame(next.startBeat) + (NUDGE[next.id] ?? 0) : beatFrame(s.startBeat + s.beats);
+    return {...s, from, to};
+  });
+};
+export const filmFrames = (shots: ShotDef[]) => {
+  const p = place(shots);
+  return p[p.length - 1].to;
+};
+/** Frame (relative to the shot's own start) of a beat inside the shot. */
+export const localFrame = (p: Placed, beat: number) => beatFrame(p.startBeat + beat) - p.from;
 
-/** Theme montage timing (shared with the picture). */
-export const THEME_INTRO = 22;
-export const THEME_STEP = 7.5;
-export const THEME_ORDER = ['terminal', 'glass', 'paper', 'midnight', 'console', 'phosphor', 'synthwave', 'blueprint', 'brutal', 'hologram', 'wasteland', 'pixel', 'ducks'] as const;
-
-/** Key moments inside shots; scenes read the same numbers. */
-export const K = {
-  chaosAppear: (i: number) => 2 + i * 4, // terminal i pops in
-  revealSuck: 8, // windows start flying into the notch
-  revealHit: 30, // they land on a beat: impact, the groove starts
-  revealPop: (i: number) => 38 + i * 4,
-  legendCols: [15, 27, 39, 51],
-  kindsCall: [6, 18, 30, 42],
-  openClick: 14,
-  jumpClick: 18,
-  jumpWhip: 26,
-  askPanel: 26,
-  keysY: [6, 12, 18],
-  keysN: [36, 40, 44],
-  riskyHit: 2,
-  riskyClick: 58,
-  qpClick1: 30,
-  qpSwap: 45,
-  qpClick2: 75,
-  cardTabs: [16, 26, 36, 46],
-  presets: [0, 15, 30],
-  toastIn: 10,
-  endType: [40, 70],
+/* ---------- events inside shots, in beats from the shot start ---------- */
+export const EV = {
+  cascade: {cut2: 1, cut3: 2, caption: 1},
+  freeze: {stop: 0.5, prompt: 0.75, caption: 1.5, dive: 3.3},
+  you: {word: 0},
+  reveal: {pull: 0.25, land: 2.75},
+  approve: {click: 0.75, open: 0.9, allow: 3, resume: 3.25},
+  title: {in: 0},
+  states: {waiting: 1, stuck: 2, done: 3, freeze: 3.75},
+  anatomy: {sub: 0.4, light: 1.9, crowd: 3.2, fold: 4.0},
+  open: {click: 0.75, pan: 2},
+  usage: {limit: 0.4, context: 1.6, cost: 2.7},
+  jump: {dclick: 1.2, whip: 1.9},
+  keys: {y: 1, n: 3},
+  risky: {tryKey: 1.25, move: 3, deny: 5.25},
+  question: {pick: 2.5, resume: 3},
+  plan: {comment: 1.25, typeFrom: 1.75, typeTo: 3, sendBack: 3.25, revised: 4, approve: 6},
+  trust: {timer: 1.25},
+  card: {done: 0.5, remaining: 2.5, files: 4.5, log: 6.5},
+  toast: {finish: 0.5},
+  themes: {first: 0},
+  sounds: {play: 1.5},
+  presets: {detailed: 1.25, everything: 2.5},
+  hosts: {vscode: 1.25, desktop: 2.5},
+  local: {line2: 1},
+  end: {install: 1.5, url: 2.5, hit: 5},
 } as const;
 
-const shotCues = (id: ShotId, len: number, V: boolean): Cue[] => {
-  switch (id) {
-    case 'chaos':
-      return Array.from({length: V ? 12 : 14}, (_, i) => ({f: K.chaosAppear(i), s: 'pop' as Sfx, v: 0.35, p: 0.8 + (i % 5) * 0.08}));
-    case 'buried':
-      return [{f: 2, s: 'swell'}, {f: 10, s: 'beep', v: 0.5}, {f: 40, s: 'beep', v: 0.5}];
-    case 'clock':
-      return [...Array.from({length: 6}, (_, i) => ({f: 4 + i * 9, s: 'tick' as Sfx, v: 0.7})), {f: 0, s: 'riser', d: len, v: 0.8}];
-    case 'slam1':
-      return [0, 15, 30, 45].map((f) => ({f, s: 'thud' as Sfx}));
-    case 'slam2':
-      return [{f: 0, s: 'thud'}, {f: 8, s: 'thud', v: 0.6}, {f: 16, s: 'thud', v: 0.7}, {f: 24, s: 'thud', v: 0.8}, {f: 30, s: 'riser', d: 15, v: 1}, {f: 38, s: 'glitch'}];
-    case 'reveal':
-      return [{f: 0, s: 'glitch'}, {f: K.revealSuck, s: 'whoosh', d: 18}, {f: K.revealHit, s: 'impact'}, {f: K.revealHit, s: 'boom'},
-        ...[0, 1, 2, 3, 4].map((i) => ({f: K.revealPop(i), s: 'pop' as Sfx, v: 0.5, p: 1 + i * 0.12}))];
-    case 'legend':
-      return [{f: 0, s: 'whoosh', d: 8}, ...K.legendCols.map((f, i) => ({f, s: 'chime' as Sfx, p: [1, 1.26, 0.84, 0.75][i], v: 0.6}))];
-    case 'kinds':
-      return K.kindsCall.map((f) => ({f, s: 'tick' as Sfx, v: 0.6}));
-    case 'open':
-      return [{f: 0, s: 'whoosh', d: 8}, {f: K.openClick, s: 'click'}, {f: K.openClick + 1, s: 'key', v: 0.6}, {f: K.openClick + 3, s: 'swell', v: 0.5}];
-    case 'list':
-      return [{f: 2, s: 'tick', v: 0.5}, {f: 30, s: 'tick', v: 0.5}];
-    case 'usage':
-      return [{f: 0, s: 'whoosh', d: 8}, ...Array.from({length: 10}, (_, i) => ({f: 10 + i * 3, s: 'tick' as Sfx, v: 0.3, p: 1 + i * 0.05}))];
-    case 'jump':
-      return [{f: 0, s: 'whoosh', d: 8}, {f: K.jumpClick, s: 'dclick'}, {f: K.jumpWhip, s: 'whoosh', d: 10}];
-    case 'ask':
-      return [{f: 0, s: 'impact', v: 0.5}, {f: 6, s: 'beep', v: 0.45}, {f: K.askPanel, s: 'swell', v: 0.6}];
-    case 'keys':
-      return [...K.keysY.map((f) => ({f, s: 'key' as Sfx})), {f: K.keysY[2] + 1, s: 'chime', p: 1.5, v: 0.5}, ...K.keysN.map((f) => ({f, s: 'key' as Sfx}))];
-    case 'risky':
-      return [{f: 0, s: 'glitch'}, {f: K.riskyHit, s: 'buzz'}, {f: K.riskyClick, s: 'click'}];
-    case 'qp':
-      return [{f: 0, s: 'whoosh', d: 8}, {f: K.qpClick1, s: 'click'}, {f: K.qpSwap, s: 'whoosh', d: 6, v: 0.5}, {f: K.qpClick2, s: 'click'}];
-    case 'trust':
-      return [{f: 0, s: 'swell', v: 0.7}];
-    case 'card':
-      return [{f: 0, s: 'whoosh', d: 8}, ...K.cardTabs.map((f) => ({f, s: 'tick' as Sfx, v: 0.5}))];
-    case 'themes':
-      return [{f: 0, s: 'impact', v: 0.6}, ...Array.from({length: 13}, (_, i) => ({f: Math.round(THEME_INTRO + i * THEME_STEP), s: 'tick' as Sfx, v: 0.55, p: 0.9 + i * 0.04}))];
-    case 'themeMarks':
-      return [{f: 0, s: 'whoosh', d: 10, v: 0.6}];
-    case 'sounds':
-      return [{f: 0, s: 'whoosh', d: 8}, {f: 14, s: 'chime', p: 1, v: 0.5}, {f: 22, s: 'chime', p: 1.26, v: 0.45}, {f: 30, s: 'chime', p: 1.5, v: 0.4}];
-    case 'toast':
-      return [{f: 0, s: 'whoosh', d: 8}, {f: K.toastIn, s: 'chime', p: 1.5, v: 0.55}];
-    case 'presets':
-      return K.presets.map((f) => ({f, s: 'click' as Sfx}));
-    case 'everywhere':
-      return [{f: 0, s: 'whoosh', d: 8}];
-    case 'outro':
-      return [{f: 0, s: 'thud'}, {f: 15, s: 'thud'}, {f: 30, s: 'riser', d: 15}];
-    case 'end':
-      return [{f: 0, s: 'impact'}, {f: 0, s: 'boom'}, {f: K.endType[0], s: 'type', d: K.endType[1] - K.endType[0], v: 0.5}];
-  }
+/** Theme montage: 13 skins; Terminal, Synthwave and Pixel are the three hero looks and hold longer. */
+export const THEME_ORDER = ['terminal', 'glass', 'paper', 'midnight', 'console', 'phosphor', 'synthwave', 'blueprint', 'brutal', 'hologram', 'wasteland', 'pixel', 'ducks'] as const;
+export const THEME_BEATS = [0, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 4, 4.25, 4.5, 4.75, 5, 6.75];
+
+/* ---------- sound effects ---------- */
+export type Sfx = 'whoosh' | 'impact' | 'boom' | 'click' | 'dclick' | 'key' | 'tick' | 'pop' | 'riser' | 'thud' | 'chime' | 'approve' | 'deny' | 'buzz' | 'type' | 'swell' | 'glass' | 'rewind';
+/** b: beat inside the shot; d: duration in beats (whoosh, riser, type); v: gain; p: pitch factor. */
+export type Cue = {b: number; s: Sfx; d?: number; v?: number; p?: number};
+
+const SHOT_CUES: Record<ShotId, Cue[]> = {
+  cascade: [
+    {b: 0, s: 'thud', v: 0.8}, {b: EV.cascade.cut2, s: 'thud', v: 0.9}, {b: EV.cascade.cut3, s: 'thud', v: 1},
+    ...Array.from({length: 12}, (_, i) => ({b: 0.15 + i * 0.3, s: 'pop' as Sfx, v: 0.3, p: 0.8 + (i % 5) * 0.08})),
+  ],
+  freeze: [{b: EV.freeze.stop, s: 'tick', v: 0.9}, {b: EV.freeze.prompt, s: 'chime', p: 0.75, v: 0.35}, {b: EV.freeze.dive - 0.3, s: 'riser', d: 0.7, v: 0.8}],
+  you: [{b: 0, s: 'thud', v: 0.6}],
+  reveal: [{b: 0, s: 'impact'}, {b: 0, s: 'boom'}, {b: EV.reveal.pull, s: 'whoosh', d: 1.2, v: 0.8}],
+  approve: [{b: EV.approve.click, s: 'click'}, {b: EV.approve.open, s: 'swell', v: 0.5}, {b: EV.approve.allow, s: 'click'}, {b: EV.approve.allow + 0.05, s: 'approve'}],
+  title: [{b: 0, s: 'whoosh', d: 0.5, v: 0.5}],
+  states: [{b: 0, s: 'tick', v: 0.6}, {b: EV.states.waiting, s: 'tick', v: 0.6, p: 1.12}, {b: EV.states.stuck, s: 'tick', v: 0.6, p: 0.84}, {b: EV.states.done, s: 'tick', v: 0.6, p: 0.75}, {b: EV.states.freeze, s: 'swell', v: 0.4}],
+  anatomy: [
+    {b: EV.anatomy.sub, s: 'pop', v: 0.6, p: 1.3}, {b: EV.anatomy.light, s: 'pop', v: 0.6, p: 0.9},
+    ...Array.from({length: 6}, (_, i) => ({b: EV.anatomy.crowd + i * 0.15, s: 'pop' as Sfx, v: 0.4, p: 1 + i * 0.08})),
+    {b: EV.anatomy.fold, s: 'whoosh', d: 0.4, v: 0.5}, {b: EV.anatomy.fold + 0.3, s: 'tick', v: 0.7},
+  ],
+  open: [{b: EV.open.click, s: 'click'}, {b: EV.open.click + 0.1, s: 'swell', v: 0.45}, {b: EV.open.pan, s: 'whoosh', d: 0.5, v: 0.4}],
+  usage: [{b: EV.usage.limit, s: 'tick', v: 0.5}, {b: EV.usage.context, s: 'tick', v: 0.5, p: 1.1}, {b: EV.usage.cost, s: 'tick', v: 0.5, p: 1.2}],
+  jump: [{b: EV.jump.dclick, s: 'dclick'}, {b: EV.jump.whip, s: 'whoosh', d: 0.4}],
+  keys: [
+    {b: EV.keys.y - 0.2, s: 'key'}, {b: EV.keys.y - 0.1, s: 'key'}, {b: EV.keys.y, s: 'key'}, {b: EV.keys.y + 0.05, s: 'approve'},
+    {b: EV.keys.n - 0.2, s: 'key'}, {b: EV.keys.n - 0.1, s: 'key'}, {b: EV.keys.n, s: 'key'}, {b: EV.keys.n + 0.05, s: 'deny'},
+  ],
+  risky: [{b: 0, s: 'buzz', v: 0.7}, {b: EV.risky.tryKey - 0.2, s: 'key'}, {b: EV.risky.tryKey - 0.1, s: 'key'}, {b: EV.risky.tryKey, s: 'key'}, {b: EV.risky.deny, s: 'click'}, {b: EV.risky.deny + 0.05, s: 'deny'}],
+  question: [{b: EV.question.pick, s: 'click'}, {b: EV.question.pick + 0.05, s: 'approve', v: 0.8}],
+  plan: [{b: EV.plan.comment, s: 'click'}, {b: EV.plan.typeFrom, s: 'type', d: EV.plan.typeTo - EV.plan.typeFrom, v: 0.5}, {b: EV.plan.sendBack, s: 'click'}, {b: EV.plan.sendBack + 0.05, s: 'rewind', v: 0.6}, {b: EV.plan.approve, s: 'click'}, {b: EV.plan.approve + 0.05, s: 'approve'}],
+  trust: [{b: 0, s: 'swell', v: 0.5}, ...Array.from({length: 6}, (_, i) => ({b: EV.trust.timer + i * 0.5, s: 'tick' as Sfx, v: 0.3, p: 0.9}))],
+  card: [{b: 0, s: 'whoosh', d: 0.4, v: 0.6}, {b: EV.card.done, s: 'click', v: 0.7}, {b: EV.card.remaining, s: 'click', v: 0.7}, {b: EV.card.files, s: 'click', v: 0.7}, {b: EV.card.log, s: 'click', v: 0.7}],
+  toast: [{b: EV.toast.finish, s: 'chime', p: 1.5, v: 0.6}],
+  themes: THEME_BEATS.map((b, i) => ({b, s: 'tick' as Sfx, v: 0.45, p: 0.9 + i * 0.03})),
+  sounds: [{b: EV.sounds.play - 0.05, s: 'click', v: 0.7}, {b: EV.sounds.play, s: 'glass', v: 0.9}],
+  presets: [{b: 0, s: 'click', v: 0.6}, {b: EV.presets.detailed, s: 'click', v: 0.6}, {b: EV.presets.everything, s: 'click', v: 0.6}],
+  hosts: [{b: 0, s: 'whoosh', d: 0.3, v: 0.5}, {b: EV.hosts.vscode, s: 'whoosh', d: 0.3, v: 0.5}, {b: EV.hosts.desktop, s: 'whoosh', d: 0.3, v: 0.5}],
+  local: [{b: 0, s: 'tick', v: 0.5}, {b: EV.local.line2, s: 'tick', v: 0.5, p: 0.8}],
+  end: [{b: 0, s: 'whoosh', d: 0.5, v: 0.5}, {b: EV.end.install, s: 'type', d: 1, v: 0.45}, {b: EV.end.hit, s: 'impact'}, {b: EV.end.hit, s: 'boom'}],
 };
 
-const ENTER_CUES: Partial<Record<Enter, Sfx>> = {whipL: 'whoosh', whipR: 'whoosh', whipU: 'whoosh'};
-
-/** Absolute cue list of a film. */
-export const cues = (shots: Shot[], V = false): Cue[] => {
-  const at = starts(shots);
-  const out: Cue[] = [];
-  shots.forEach((s, i) => {
-    const own = shotCues(s.id, s.len, V);
-    const hasWhoosh = own.some((c) => c.s === 'whoosh' && c.f <= 1);
-    const e = s.enter && ENTER_CUES[s.enter];
-    if (e && !hasWhoosh) out.push({f: at[i], s: e, d: 8});
-    own.forEach((c) => c.f < s.len && out.push({...c, f: at[i] + c.f}));
-  });
+/** Absolute cue list of a film, in frames. */
+export const cues = (shots: ShotDef[]) => {
+  const out: {f: number; s: Sfx; d: number; v: number; p: number}[] = [];
+  for (const p of place(shots)) {
+    for (const c of SHOT_CUES[p.id]) {
+      const f = p.from + localFrame(p, c.b);
+      if (f >= p.to) continue;
+      const d = c.d ? Math.max(1, beatFrame(p.startBeat + c.b + c.d) - beatFrame(p.startBeat + c.b)) : 8;
+      out.push({f: Math.max(0, f), s: c.s, d, v: c.v ?? 1, p: c.p ?? 1});
+    }
+  }
   return out.sort((a, b) => a.f - b.f);
 };
 
-/** Music sections (absolute frames). */
-export const sections = (shots: Shot[]) => {
-  const at = starts(shots);
-  return shots.map((s, i) => ({from: at[i], to: at[i] + s.len, music: s.music, id: s.id}));
+/** Music sections in absolute frames and beats, merged across neighbouring shots. */
+export const sections = (shots: ShotDef[]) => {
+  const out: {from: number; to: number; music: Section; fromBeat: number; toBeat: number}[] = [];
+  for (const p of place(shots)) {
+    const last = out[out.length - 1];
+    if (last && last.music === p.music) {
+      last.to = p.to;
+      last.toBeat = p.startBeat + p.beats;
+    } else out.push({from: p.from, to: p.to, music: p.music, fromBeat: p.startBeat, toBeat: p.startBeat + p.beats});
+  }
+  return out;
 };
