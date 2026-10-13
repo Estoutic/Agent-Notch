@@ -9,7 +9,7 @@
  *   {"frames":[[[x,y],[x,y],[x,y],[x,y]], ...]}   (tl, tr, br, bl)   or a bare array of either
  */
 import React, {useEffect, useState} from 'react';
-import {AbsoluteFill, Img, continueRender, delayRender, getStaticFiles, staticFile, useVideoConfig} from 'remotion';
+import {Img, continueRender, delayRender, getStaticFiles, staticFile, useVideoConfig} from 'remotion';
 import {SCREEN_H, SCREEN_W, SX0, ScreenContent, ScreenProps} from './world';
 
 export type BlenderShot = 'reveal' | 'orbit' | 'push' | 'endcard' | 'reveal-v' | 'endcard-v';
@@ -75,18 +75,44 @@ export const quadMatrix = (w: number, h: number, q: Quad) => {
   return `matrix3d(${m.map((v) => v.toFixed(10)).join(',')})`;
 };
 
-/** Plays a Blender shot and lays the live screen over it. `frame` is the sequence frame to show. */
-export const BlenderDevice: React.FC<{shot: BlenderShot; frame: number; screen: ScreenProps; dim?: number}> = ({shot, frame, screen, dim = 0}) => {
-  const {width, height} = useVideoConfig();
+/** Projects a point of the w x h rectangle onto the quad (the same mapping as quadMatrix). */
+export const quadPoint = (w: number, h: number, q: Quad, x: number, y: number) => {
+  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = q;
+  const dx1 = x1 - x2, dx2 = x3 - x2, dy1 = y1 - y2, dy2 = y3 - y2;
+  const sx = x0 - x1 + x2 - x3, sy = y0 - y1 + y2 - y3;
+  const den = dx1 * dy2 - dx2 * dy1;
+  const g = (sx * dy2 - dx2 * sy) / den;
+  const hh = (dx1 * sy - sx * dy1) / den;
+  const u = x / w, v = y / h, z = g * u + hh * v + 1;
+  return {x: ((x1 - x0 + g * x1) * u + (x3 - x0 + hh * x3) * v + x0) / z, y: ((y1 - y0 + g * y1) * u + (y3 - y0 + hh * y3) * v + y0) / z};
+};
+
+/** The screen quad of one frame in output pixels of a width x height layer, or undefined while loading. */
+export const useBlenderQuad = (shot: BlenderShot, frame: number, width: number, height: number): Quad | undefined => {
   const list = blenderFrames(shot);
   const corners = useCorners(shot);
   const i = Math.max(0, Math.min(list.length - 1, Math.floor(frame)));
   const q = corners?.frames[Math.min(corners.frames.length - 1, i)];
   const rw = corners?.w ?? width, rh = corners?.h ?? height;
   const norm = q ? q.every(([x, y]) => x <= 1.5 && y <= 1.5) : false;
-  const quad: Quad | undefined = q?.map(([x, y]) => (norm ? [x * width, y * height] : [(x * width) / rw, (y * height) / rh]) as [number, number]);
+  return q?.map(([x, y]) => (norm ? [x * width, y * height] : [(x * width) / rw, (y * height) / rh]) as [number, number]);
+};
+
+/** A stage point (stage coordinates of ScreenContent) in output pixels on the 3D screen. */
+export const stageToQuad = (quad: Quad | undefined, x: number, y: number) => (quad ? quadPoint(SCREEN_W, SCREEN_H, quad, x - SX0, y) : {x: 0, y: 0});
+
+/**
+ * Plays a Blender shot and lays the live screen over it. `frame` is the sequence frame to show. `w`/`h` set the
+ * layer size (default: the composition), so a still of another aspect can place a 16:9 frame itself.
+ */
+export const BlenderDevice: React.FC<{shot: BlenderShot; frame: number; screen: ScreenProps; dim?: number; w?: number; h?: number}> = ({shot, frame, screen, dim = 0, w, h}) => {
+  const cfg = useVideoConfig();
+  const width = w ?? cfg.width, height = h ?? cfg.height;
+  const list = blenderFrames(shot);
+  const i = Math.max(0, Math.min(list.length - 1, Math.floor(frame)));
+  const quad = useBlenderQuad(shot, frame, width, height);
   return (
-    <AbsoluteFill>
+    <div style={{position: 'absolute', left: 0, top: 0, width, height}}>
       <Img src={staticFile(list[i])} style={{width, height, objectFit: 'cover'}} />
       {quad && (
         <div style={{position: 'absolute', left: 0, top: 0, width: SCREEN_W, height: SCREEN_H, transformOrigin: '0 0', transform: quadMatrix(SCREEN_W, SCREEN_H, quad), overflow: 'hidden'}}>
@@ -96,6 +122,6 @@ export const BlenderDevice: React.FC<{shot: BlenderShot; frame: number; screen: 
           {dim > 0 && <div style={{position: 'absolute', inset: 0, background: `rgba(0,0,0,${dim})`}} />}
         </div>
       )}
-    </AbsoluteFill>
+    </div>
   );
 };

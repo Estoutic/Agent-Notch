@@ -83,7 +83,7 @@ Loudness of any file: `ffmpeg -i file.wav -af loudnorm=print_format=json -f null
 
 Photoreal MacBook shots come from `blender/build_scene.py`, a separate job. Each shot is an image sequence `public/blender/<shot>/NNNN.png` plus `public/blender/<shot>.json` with `width`, `height`, `fps`, `frameCount` and `frames[]`, where each frame has the four screen corners `corners: {tl, tr, br, bl}` in render pixels.
 
-`src/device.tsx` looks for the files when the bundle is built. When a shot is there, the film plays it and lays the live screen over it with a `matrix3d` built from the corners; otherwise it draws the 2D laptop. The film uses `reveal` and `reveal-v` in the reveal, and `endcard` and `endcard-v` at the end.
+`src/device.tsx` looks for the files when the bundle is built. When a shot is there, the film plays it and lays the live screen over it with a `matrix3d` built from the corners; otherwise it draws the 2D laptop. The film uses `reveal` and `reveal-v` in the reveal, and `endcard` and `endcard-v` at the end. `Hero` and `Poster` hold frame 23 of `push` (`PUSH_FRAME`) under a fixed 2D zoom (`Z`); the cursor targets are projected onto that frame with `stageToQuad`.
 
 ## Layout
 
