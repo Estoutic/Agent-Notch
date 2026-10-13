@@ -1,8 +1,8 @@
 import React from 'react';
 import {AbsoluteFill, spring, useCurrentFrame} from 'remotion';
-import {C, Caption, Cursor, Keycap, Ripple, State, camAt, range, win} from './lib';
+import {C, Caption, Cursor, Keycap, Ripple, State, camAt, cursorState, range, win} from './lib';
 import {ASK_WING, Laptop, Panel, World} from './world';
-import {cursorState} from './scenes/Panels';
+
 
 /* 9 s seamless loop for the README: calm -> two agents wait -> approve from the notch -> calm. */
 export const HERO_LEN = 270;
@@ -39,6 +39,7 @@ export const Hero: React.FC = () => {
       </World>
       <Caption frame={f} from={22} to={76} y={720} size={92} segs={[{t: 'Two agents are'}, {t: 'waiting.', c: C.yellow}]} />
       <Caption frame={f} from={100} to={206} y={900} size={80} segs={[{t: 'Approve from'}, {t: 'the notch.'}]} />
+      <Caption frame={f} from={210} to={262} y={760} size={80} segs={[{t: 'Agent Notch.'}, {t: 'Every agent, one notch.', c: '#a1a1a8'}]} />
       <div style={{position: 'absolute', right: 120, top: 560, display: 'flex', gap: 14, opacity: kOp}}>
         <Keycap pressed={kp} size={76}>⌃</Keycap><Keycap pressed={kp} size={76}>⌥</Keycap><Keycap pressed={kp} size={76}>Y</Keycap>
       </div>

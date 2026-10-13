@@ -73,21 +73,26 @@ export const Mark: React.FC<{vendor: 'claude' | 'codex'; size: number; state: St
         ) : (
           <>
             <defs>
-              <radialGradient id="mk-cx" cx="0.45" cy="0.3" r="0.8">
-                <stop offset="0" stopColor="#b3bcff" />
-                <stop offset="0.55" stopColor="#4a55ff" />
-                <stop offset="1" stopColor="#2a24d8" />
-              </radialGradient>
+              <linearGradient id="mk-cx" x1="0.2" y1="0" x2="0.6" y2="1">
+                <stop offset="0" stopColor="#c9b8ff" />
+                <stop offset="0.45" stopColor="#6f74ff" />
+                <stop offset="1" stopColor="#2f2fe6" />
+              </linearGradient>
             </defs>
-            <rect width="100" height="100" rx={24} fill="#17171e" stroke="#2c2c38" strokeWidth="3" />
-            <circle cx="50" cy="50" r="33" fill="url(#mk-cx)" />
-            <path d="M33 40 L43 50 L33 60" fill="none" stroke="#e8ecff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="49" y1="61" x2="65" y2="61" stroke="#e8ecff" strokeWidth="6" strokeLinecap="round" />
+            <rect width="100" height="100" rx={24} fill="#141417" stroke="#2a2a30" strokeWidth="2" />
+            <g fill="url(#mk-cx)">
+              {Array.from({length: 8}).map((_, i) => (
+                <circle key={i} cx={50 + 20 * Math.cos((i * Math.PI) / 4)} cy={50 + 18 * Math.sin((i * Math.PI) / 4)} r={15} />
+              ))}
+              <circle cx="50" cy="50" r="24" />
+            </g>
+            <path d="M35 41 L43 49 L35 57" fill="none" stroke="#dfe3ff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+            <line x1="49" y1="59" x2="64" y2="59" stroke="#dfe3ff" strokeWidth="6" strokeLinecap="round" />
           </>
         )}
       </svg>
       <div style={{position: 'absolute', left: size - dot / 2 - size * 0.04, top: size - dot / 2 - size * 0.04, width: dot, height: dot, borderRadius: '50%',
-        background: col, boxShadow: `0 0 0 ${dot * 0.18}px #000${glow > 0 ? `, 0 0 ${dot * 2.2}px ${dot * 0.4}px ${col}${Math.round(glow * 160).toString(16).padStart(2, '0')}` : ''}`, opacity: dotOpacity}} />
+        background: col, boxShadow: `0 0 0 ${dot * 0.2}px ${col === C.grey ? '#2a2a2e' : col + '55'}, 0 0 0 ${dot * 0.2}px #000${glow > 0 ? `, 0 0 ${dot * 2.2}px ${dot * 0.4}px ${col}${Math.round(glow * 160).toString(16).padStart(2, '0')}` : ''}`, opacity: dotOpacity}} />
     </div>
   );
 };
@@ -142,3 +147,24 @@ export const Caption: React.FC<{
     </div>
   );
 };
+
+/** Cursor that glides from `a` to `b` (stage coords), arriving at `arrive`, clicking at `click`. */
+export const cursorState = (f: number, start: number, arrive: number, click: number, a: {x: number; y: number}, b: {x: number; y: number}, fadeOut = click + 20) => {
+  const p = range(f, start, arrive, easeIO);
+  const x = lerp(a.x, b.x, p) + Math.sin(p * Math.PI) * 30;
+  const y = lerp(a.y, b.y, p) - Math.sin(p * Math.PI) * 20;
+  const press = range(f, click - 3, click) * (1 - range(f, click + 1, click + 7));
+  const op = range(f, start, start + 6) * (1 - range(f, fadeOut, fadeOut + 10));
+  const ripple = range(f, click, click + 20, (t) => t);
+  return {x, y, press, op, ripple};
+};
+
+/** Spring-ish overshoot 0..1 for a pop starting at frame a. */
+export const popAt = (f: number, a: number, d = 10) => {
+  const t = clamp01((f - a) / d);
+  if (t <= 0) return 0;
+  return 1 + Math.sin(t * Math.PI) * 0.18 * (1 - t) - Math.pow(1 - t, 3);
+};
+
+/** Count up from 0 to `to` between frames a and b. */
+export const countUp = (f: number, a: number, b: number, to: number) => to * range(f, a, b, (t) => 1 - Math.pow(1 - t, 3));

@@ -1,6 +1,6 @@
 import React from 'react';
 import {Composition, Still} from 'remotion';
-import {Promo, Vertical, PROMO_LEN, VERTICAL_LEN} from './Promo';
+import {Promo, Vertical, PROMO_LEN, VERTICAL_LEN} from './Film';
 import {Hero, HERO_LEN} from './Hero';
 import {Poster} from './Poster';
 
