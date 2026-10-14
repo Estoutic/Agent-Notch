@@ -30,10 +30,32 @@ SIDE = Vector((1, 0, 0))
 
 def opts():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    o = {"shots": "all", "scale": "50", "samples": "16", "frames": "", "out": OUT}
+    o = {"shots": "all", "scale": "50", "samples": "16", "frames": "", "out": OUT, "quality": "preview", "resume": "0"}
     for k, v in zip(a[::2], a[1::2]):
         o[k.lstrip("-")] = v
     return o
+
+
+def max_quality(sc):
+    """--quality max: full-resolution ray tracing, finer GI, shadows and volumes. Same look, less noise and
+    banding; several times slower per sample than the preview settings."""
+    e = sc.eevee
+    e.use_raytracing = True
+    e.ray_tracing_method = 'SCREEN'
+    rt = e.ray_tracing_options
+    rt.resolution_scale = '1'
+    rt.screen_trace_quality = 1.0
+    rt.trace_max_roughness = 0.8
+    e.fast_gi_resolution = '1'
+    e.fast_gi_quality = 1.0
+    e.fast_gi_step_count = 16
+    e.fast_gi_ray_count = 4
+    e.shadow_ray_count = 4
+    e.shadow_step_count = 16
+    e.shadow_pool_size = '1024'
+    e.volumetric_tile_size = '2'
+    e.volumetric_samples = 128
+    e.volumetric_shadow_samples = 32
 
 
 # ---------------------------------------------------------------- helpers
@@ -860,6 +882,8 @@ def main():
     for name in names:
         S = int(o["samples"])
         sc, frame = SHOTS[name](S)
+        if o["quality"] == "max":
+            max_quality(sc)
         for r in RAMPS(name):
             ts = [remap(r[0], RAMPS(name))]
             print(f"RAMP {name}: t(ev {r[0]}) = {ts[0]:.6f} == ev: {abs(ts[0] - r[0]) < 1e-9}; "
@@ -875,12 +899,14 @@ def main():
         t0 = time.time()
         for idx in pick:
             frame(idx - HANDLE)
-            bpy.context.view_layer.update()
             sc.render.filepath = os.path.join(outdir, f"{idx:04d}.png")
+            if o["resume"] == "1" and os.path.exists(sc.render.filepath):
+                continue    # --resume 1: frame() still runs in order, only frames already on disk are skipped
+            bpy.context.view_layer.update()
             bpy.ops.render.render(write_still=True)
         dt = time.time() - t0
         times[name] = {"frames": len(pick), "seconds": round(dt, 1), "s_per_frame": round(dt / max(1, len(pick)), 3),
-                       "scale": int(o["scale"]), "samples": S}
+                       "scale": int(o["scale"]), "samples": S, "quality": o["quality"]}
         print(f"PLATE {name}: {len(pick)} frames in {dt:.1f}s ({dt / max(1, len(pick)):.2f}s/frame)", flush=True)
     with open(os.path.join(o["out"], "_times.json"), "a") as fh:
         fh.write(json.dumps(times) + "\n")
