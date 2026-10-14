@@ -134,13 +134,13 @@ def remap(lf, ramps):
 
 
 # (event key, pre, post, slow) per shot; the event frame comes from PLAN so the ramp follows the timeline
-RAMP_SPEC = {"reveal": [("land", 14, 18, 0.5)],
-             "approve": [("click", 10, 22, 0.35), ("allow", 8, 14, 0.4)],
-             "open": [("click", 10, 22, 0.35)],
-             "keys": [("y", 10, 16, 0.35), ("n", 10, 18, 0.35)],
-             "question": [("pick", 10, 20, 0.35)],
-             "plan": [("approve", 10, 22, 0.35)],
-             "risky": [("deny", 10, 24, 0.3)]}
+RAMP_SPEC = {"reveal": [("land", 18, 24, 0.75)],
+             "approve": [("click", 14, 26, 0.65), ("allow", 12, 20, 0.7)],
+             "open": [("click", 14, 26, 0.65)],
+             "keys": [("y", 14, 20, 0.65), ("n", 14, 22, 0.65)],
+             "question": [("pick", 14, 24, 0.65)],
+             "plan": [("approve", 14, 26, 0.65)],
+             "risky": [("deny", 14, 28, 0.6)]}
 
 
 def RAMPS(shot):
@@ -148,8 +148,12 @@ def RAMPS(shot):
     return [(ev[k], pre, post, slow) for k, pre, post, slow in RAMP_SPEC.get(shot, [])]
 
 
+SHAKE = 0.0  # owner, round 2: the cut read as jerky; shake is off
+
+
 def shake(lf, hits, amp=1.0, rot=1.0, dur=10):
     """Camera shake on hits: decays in a few frames. amp in mm, rot scales ~0.3 deg. Returns (dx, dy, pitch, yaw)."""
+    amp, rot = amp * SHAKE, rot * SHAKE
     dx = dy = rx = ry = 0.0
     for h in hits:
         x = lf - h
@@ -163,8 +167,8 @@ def shake(lf, hits, amp=1.0, rot=1.0, dur=10):
 
 
 def bump(lf, at, pre=3, post=12):
-    """0..1 bump peaking at `at` (a kick / push-in on a hit)."""
-    return ss(at - pre, at, lf) * (1 - ss(at, at + post, lf))
+    """0..0.4 bump peaking at `at` (a gentle push-in on a hit; was 1.0, read as jerky)."""
+    return 0.4 * ss(at - pre * 2, at, lf) * (1 - ss(at, at + post * 1.5, lf))
 
 
 def panel_cam(hinge, sx, sy, width_px, lens=50):
@@ -473,7 +477,7 @@ def shot_keys(S):
 def shot_question(S):
     """The pressed key becomes the option: macro on 'On the client', pull back to the panel; one click answers."""
     sc, cam, hinge = scene("question", samples=S)
-    scr = Screen(["question", "sub"])
+    scr = Screen(["question", "question-pick", "sub"])
     ev = PLAN["shots"]["question"]["ev"]
     n = PLAN["shots"]["question"]["len"]
     B.set_lid(hinge, 110)
@@ -484,13 +488,11 @@ def shot_question(S):
     a_l = opt + nrm * 0.07 + SIDE * 0.02 + Vector((0, 0, -0.02))
     b_l = req + nrm * 0.27 + SIDE * 0.11 + Vector((0, 0, -0.10))
 
-    pick = tint_card(hinge, 783, 339, 66, 6.6, color=(1.0, 0.62, 0.08), name="Pick")
     rp = RAMPS("question")
 
     def frame(lf):
-        scr.show("question" if lf < ev["pick"] + 10 else "sub")
-        on = ss(ev["pick"] - 2, ev["pick"], lf) * (1 - ss(ev["pick"] + 8, ev["pick"] + 10, lf))
-        pick.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.5 * on
+        # the highlight is baked into the face, on the option's own pixels
+        scr.show("question" if lf < ev["pick"] - 2 else "question-pick" if lf < ev["pick"] + 10 else "sub")
         tt = remap(lf, rp)
         e = ease(ss(-HANDLE, 30, tt), 2.6)
         creep = ss(30, n, tt)
@@ -532,7 +534,7 @@ def shot_plan(S):
 def shot_risky(S):
     """The red row lights the desk and the aluminium; nothing else is lit; Deny; the pull-back."""
     sc, cam, hinge = scene("ask", screen=0.9, key=0.25, fill=0.25, samples=S)
-    scr = Screen(["ask", "ask-claude"])
+    scr = Screen(["ask-red", "ask-deny", "ask-claude"])
     ev = PLAN["shots"]["risky"]["ev"]
     n = PLAN["shots"]["risky"]["len"]
     B.set_lid(hinge, 110)
@@ -549,22 +551,18 @@ def shot_risky(S):
     focus = B.stage_point(hinge, 700, 490)
     wide_l = Vector((0.17, -0.36, 0.10))
     wide_t = B.stage_point(hinge, 760, 760)
-    tint = tint_card(hinge, 633, 493, 32, 4.5)
     dpt = B.stage_point(hinge, 601, 533)
-    deny = tint_card(hinge, 601, 533, 10, 4.0, color=(1.0, 0.85, 0.8), name="DenyHot")
     loc_d = dpt + nrm * 0.16 + SIDE * 0.05 + Vector((0, 0, -0.05))
     rp = RAMPS("risky")
 
     def frame(lf):
         on = ss(-HANDLE, 6, lf) * (1 - ss(ev["deny"] + 2, ev["deny"] + 14, lf))
-        hot = ss(ev["deny"] - 3, ev["deny"], lf) * (1 - ss(ev["deny"], ev["deny"] + 2, lf))
-        row_on = on * (1 - ss(ev["deny"], ev["deny"] + 2, lf))  # the row glow goes with the panel
-        deny.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.6 * hot
         pulse = 0.85 + 0.15 * math.sin(lf / 30 * 2 * math.pi * 1.0)
         red.data.energy = 40.0 * on * pulse * (1 - ss(ev["deny"], ev["deny"] + 2, lf))
         red_low.data.energy = 55.0 * on * pulse
-        scr.show("ask" if lf < ev["deny"] + 2 else "ask-claude", 1.0 - 0.25 * on)
-        tint.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.22 * row_on * pulse
+        # row and Deny highlights are baked into the faces, on the UI's own pixels
+        face = "ask-red" if lf < ev["deny"] - 3 else "ask-deny" if lf < ev["deny"] + 2 else "ask-claude"
+        scr.show(face, 1.0 - 0.25 * on)
         tt = remap(lf, rp)
         push = ease(ss(-HANDLE, ev["tryKey"] + 8, tt), 1.8)
         m = ease(ss(ev["move"] - 6, ev["move"] + 18, tt), 2.6)

@@ -35,7 +35,7 @@ export const V7: Shot7[] = [
   {id: 'open', beats: 5, kind: '3d', in: {type: 'dissolve', x: 4, note: 'the fly-over rises to the whole panel'}},
   {id: 'usage', beats: 5, kind: '2d', k: 1.25, in: {type: 'dissolve', x: 3, note: 'the panel row becomes the usage card'}},
   {id: 'jump', beats: 4, kind: '2d', in: CUT},
-  {id: 'keys', beats: 6, kind: '3d', in: CUT}, // jump ends in a whip; the music jumps back to groove 2 on this cut
+  {id: 'keys', beats: 6, kind: '2d', in: CUT}, // jump ends in a whip; the music jumps back to groove 2 on this cut
   {id: 'question', beats: 6, kind: '3d', in: {type: 'zoom', x: 4, note: 'the pressed key becomes the next panel button'}},
   {id: 'plan', beats: 8, kind: '3d', in: {type: 'dissolve', x: 3, note: 'answered question -> the plan on the same panel'}},
   {id: 'risky', beats: 10, kind: '3d', in: CUT}, // cut on the breakdown: everything goes dark, the red row lights the desk
@@ -70,19 +70,24 @@ export const local7 = (p: Placed7, beat: number) => beatFrame(p.startBeat + beat
  * groove 64-103 (softer 89-96), final hit 104.8.
  *   0-8     intro (as v4)
  *   8-10    dead stop: "You."
- *   10-54   drop and groove, offset 10 (as v4): the first breakdown sits under swarm (34-42)
- *   54-98.5 back two bars on the cut to keys (offset 18): groove 2 re-enters on the keys; breakdown 2 = risky (74-82)
+ *   10-50   drop and groove, offset 10 (as v4): the first breakdown sits under swarm (34-42)
+ *   50-98.5 on the cut to jump the track restarts groove 2 from its top (track 32, offset 18): a whole 8-beat phrase
+ *           repeats, no mid-phrase jump; breakdown 2 = risky (74-82)
  *   98.5-101 silence before the night (room tone only)
- *   101-111 the softer stretch under the night time-lapse (offset 14)
- *   111-     the morning: groove 3 from bar 77 (offset 34); the final hit lands at film beat 138.8 = end + 1.8 (v4: 1.81)
+ *   101-106 the night enters on the same offset (track 83), dipped 4 dB
+ *   106-     back four bars on a phrase line inside the night (track 88 -> 72, offset 34): the morning at 111 is track
+ *           77 as before, and the final hit lands at film beat 138.8 = end + 1.8 (v4: 1.81)
+ * Every jump lands on a phrase line of the track (sections start at 0, 24, 32, 56, 64; phrases are 8 beats).
  */
 export const MUSIC7: MusicSeg[] = [
   {from: 0, to: 8, src: -8},
-  {from: 10, to: 54, src: 0},
-  {from: 54, to: 98.5, src: 36},
-  {from: 101, to: 111, src: 87},
-  {from: 111, to: 147, src: 77},
+  {from: 10, to: 50, src: 0},
+  {from: 50, to: 98.5, src: 32},
+  {from: 101, to: 106, src: 83},
+  {from: 106, to: 147, src: 72},
 ];
+/** Music under the night: dipped 4 dB from the night's entry to the morning. */
+export const NIGHT_MUSIC = {from: 101, to: 111};
 export const HIT7 = undefined; // the track's own final hit (track beat 104.8) plays out; no synth hit
 export const HIT7_BEAT = 104.8 + 34;
 

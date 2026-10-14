@@ -8,7 +8,7 @@
  */
 import {mkdirSync} from 'node:fs';
 import {FPS, MUSIC_FILE} from '../src/timeline.ts';
-import {LEN7, MUSIC7, HIT7, cues7, ROOM7, FPB, type Sfx7} from '../src/v7/timeline7.ts';
+import {LEN7, MUSIC7, NIGHT_MUSIC, HIT7, cues7, ROOM7, FPB, type Sfx7} from '../src/v7/timeline7.ts';
 import {
   SR, TAU, setSeed, rnd, noise, bus, Mix, Biquad, sfx, reverb, filmT, decode, editTrack, writeWav, ACCENTS, master, type Cue,
 } from './synth.mts';
@@ -142,8 +142,7 @@ const render = (file: string) => {
   const track = decode(new URL(`../public/${MUSIC_FILE7}`, import.meta.url).pathname);
   if (!track) throw new Error(`music file public/${MUSIC_FILE7} is missing`);
   const edit = editTrack(mus, track, MUSIC7, HIT7);
-  const night = MUSIC7[3], morning = MUSIC7[4];
-  const nA = filmT(night.from), nB = filmT(morning.from), nG = Math.pow(10, -4 / 20);
+  const nA = filmT(NIGHT_MUSIC.from), nB = filmT(NIGHT_MUSIC.to), nG = Math.pow(10, -4 / 20);
   const fiN = 0.5 * beatS, fiM = 0.25 * beatS;
   for (let k = 0; k < n; k++) {
     const t = k / SR;

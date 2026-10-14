@@ -4,3 +4,4 @@ export {Trust7} from './Answer7';
 export {CardShot7, ToastShot7} from './Finish7';
 export {Sounds7, Presets7} from './Custom7';
 export {Hosts7} from './Close7';
+export {Keys7} from './Keys7';

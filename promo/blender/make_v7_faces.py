@@ -40,7 +40,31 @@ SNAPS_ANIM = {
     # after one click only one request is resolved: Allow on Claude's leaves Codex's waiting, Deny on Codex's leaves Claude's
     "ask-codex": "public/snap5/ask-codex.png",
     "ask-claude": "public/snap5/ask-claude.png",
+    # highlights drawn on the snapshot itself, in its own @3x pixels, so they sit exactly on the UI they mark
+    "question-pick": ("public/snap4/question.png", "pick"),
+    "ask-red": ("public/snap4/ask.png", "red"),
+    "ask-deny": ("public/snap4/ask.png", "deny"),
 }
+
+# @3x snapshot boxes (x0, y0, x1, y1), measured on the PNGs
+PICK_BOX = (683, 459, 1665, 561)      # question.png: the "On the client" option
+CODEX_ROW = (632, 650, 1737, 846)     # ask.png: Codex's rm -rf request
+CODEX_DENY = (842, 774, 963, 828)     # ask.png: its Deny button
+
+
+def mark(shot, kind):
+    """Highlight one element of a snapshot in place: amber pick, red risky row, pressed Deny."""
+    im = shot.convert("RGBA")
+    lay = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(lay)
+    if kind == "pick":
+        d.rounded_rectangle(PICK_BOX, radius=18, fill=(255, 176, 31, 60), outline=(255, 176, 31, 255), width=5)
+    if kind in ("red", "deny"):
+        d.rectangle(CODEX_ROW, fill=(255, 40, 30, 52))
+        d.rectangle((CODEX_ROW[0], CODEX_ROW[1], CODEX_ROW[0] + 7, CODEX_ROW[3]), fill=(255, 59, 48, 255))
+    if kind == "deny":
+        d.rounded_rectangle(CODEX_DENY, radius=14, fill=(255, 255, 255, 70), outline=(255, 255, 255, 255), width=4)
+    return Image.alpha_composite(im, lay)
 
 
 def wallpaper():
@@ -54,7 +78,9 @@ def wallpaper():
 
 
 def desktop(src, bar_only=False):
-    shot = Image.open(os.path.join(PROMO, src)).convert("RGB")
+    src, kind = src if isinstance(src, tuple) else (src, None)
+    shot = Image.open(os.path.join(PROMO, src))
+    shot = (mark(shot, kind) if kind else shot).convert("RGB")
     s = shot.resize((round(shot.width * 2 / 3), round(shot.height * 2 / 3)), Image.LANCZOS)
     d = wallpaper()
     # keep the snapshot's dark parts (notch bar, panel), drop its flat grey desktop and menu bar

@@ -15,14 +15,14 @@ import {THEME_NAMES} from '../scenes/Custom';
 import {INSTALL, Local} from '../scenes/Close';
 // states and anatomy keep v4's drawn marks: the real snapshots carry the vendor glyphs, too big to show at that scale
 import {Anatomy, States} from '../scenes/Aware';
-import {CardShot7, Hosts7, Jump7, Presets7, Sounds7, TitleCard7, ToastShot7, Trust7, Usage7} from './scenes7';
+import {CardShot7, Hosts7, Jump7, Keys7, Presets7, Sounds7, TitleCard7, ToastShot7, Trust7, Usage7} from './scenes7';
 import {Caption} from '../scenes/common';
-import {EV7, HANDLE, LEN7, beatFrame, local7, place7, type Placed7, type Shot7Id} from './timeline7';
+import {EV7, HANDLE, LEN7, local7, place7, type Placed7, type Shot7Id} from './timeline7';
 
 loadFonts();
 
 const TWO_D: Partial<Record<Shot7Id, React.FC>> = {
-  freeze: FreezeShot, you: You, title: TitleCard7, states: States, anatomy: Anatomy, usage: Usage7, jump: Jump7,
+  freeze: FreezeShot, you: You, title: TitleCard7, states: States, anatomy: Anatomy, usage: Usage7, jump: Jump7, keys: Keys7,
   card: CardShot7, toast: ToastShot7, trust: Trust7, sounds: Sounds7, presets: Presets7, hosts: Hosts7, local: Local,
 };
 
@@ -86,18 +86,6 @@ const ComboAt: React.FC<{at: number; keys: string[]; tone: string; x: number; y:
     <div style={{position: 'absolute', left: x, top: y, opacity: a, transform: `translateY(${(1 - a) * 16}px)`}}>
       <Combo f={f} at={at} keys={keys} size={96} tone={tone} />
     </div>
-  );
-};
-
-const Keys: React.FC = () => {
-  const {f, ev, len} = use3D();
-  return (
-    <>
-      {shade('top', 0.7)}
-      <Cap f={f} from={4} to={len + 1} V={false} ly={90} lx={120} sub="Oldest request first. No mouse.">⌃⌥Y allows. ⌃⌥N denies.</Cap>
-      <ComboAt at={ev.y} keys={['⌃', '⌥', 'Y']} tone={C.green} x={120} y={300} />
-      <ComboAt at={ev.n} keys={['⌃', '⌥', 'N']} tone={C.red} x={120} y={300} />
-    </>
   );
 };
 
@@ -193,7 +181,7 @@ const End: React.FC = () => {
   );
 };
 
-const TYPE: Partial<Record<Shot7Id, React.FC>> = {cascade: Cascade, swarm: Swarm, open: Open, keys: Keys, question: Question, plan: Plan, risky: Risky, night: Night, themes: Themes, end: End};
+const TYPE: Partial<Record<Shot7Id, React.FC>> = {cascade: Cascade, swarm: Swarm, open: Open, question: Question, plan: Plan, risky: Risky, night: Night, themes: Themes, end: End};
 
 /** A 3D shot at local frame (sequence frame + off). Type is hidden while the shot is still a pre-roll. */
 const Shot3D: React.FC<{p: Placed7; off?: number}> = ({p, off = 0}) => {
@@ -252,28 +240,21 @@ const hasFile = (name: string) => {
 };
 
 /*
- * Dynamics over the whole cut: a snap-in on every hard cut (scale 1.06 -> 1 in 6 frames, a short white flash on the
- * cuts that land on a bar line), and a small punch on each bar downbeat inside the 2D shots.
+ * A soft settle on every hard cut (scale 1.02 -> 1 over 12 frames). Flashes and bar punches were cut after the owner's
+ * round-2 note (too jerky).
  */
 const PLACED = place7();
 const QUIET = new Set(['freeze', 'you']); // the hook's dead stops stay still
-const CUT_AT = PLACED.filter((p, i) => i > 0 && (!p.in || p.in.type === 'cut') && !QUIET.has(p.id)).map((p) => ({f: p.from, bar: p.startBeat % 4 === 0}));
-const BARS = Array.from({length: 40}, (_, i) => beatFrame(i * 4)).filter((f) => f > 0 && f < LEN7);
+const CUT_AT = PLACED.filter((p, i) => i > 0 && (!p.in || p.in.type === 'cut') && !QUIET.has(p.id)).map((p) => ({f: p.from}));
 const kick = (f: number, at: number, dur: number) => (f >= at && f < at + dur ? Math.exp(-(f - at) / (dur / 3)) : 0);
 const Punch: React.FC<{children: React.ReactNode}> = ({children}) => {
   const f = useCurrentFrame();
-  const shot = PLACED.find((p) => f >= p.from && f < p.to);
   let s = 1;
-  let flash = 0;
-  for (const c of CUT_AT) {
-    s += 0.06 * kick(f, c.f, 8);
-    if (c.bar) flash = Math.max(flash, 0.22 * kick(f, c.f, 5));
-  }
-  if (shot?.kind === '2d') for (const b of BARS) if (!CUT_AT.some((c) => c.f === b)) s += 0.025 * kick(f, b, 9);
+  // owner, round 2: flashes and bar punches read as jerky; only a soft settle on hard cuts stays
+  for (const c of CUT_AT) s += 0.02 * kick(f, c.f, 12);
   return (
     <AbsoluteFill>
       <AbsoluteFill style={{transform: `scale(${s})`}}>{children}</AbsoluteFill>
-      {flash > 0.005 && <AbsoluteFill style={{background: '#fff', opacity: flash, mixBlendMode: 'screen'}} />}
     </AbsoluteFill>
   );
 };
