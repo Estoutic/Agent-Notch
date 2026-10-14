@@ -146,3 +146,20 @@ Open P3 items:
 - The sounds click ring appears 3 frames late.
 - Title and usage dissolves dip through black.
 - The hosts desktop text is too small to read.
+
+## Owner notes, round 3 (2026-10-14)
+
+The owner reported four problems: the music jumped, the cut felt jerky, the keyboard shot did not work, and the
+highlights sat off the UI.
+
+- Music: the two jumps that landed mid-phrase (26.5 s, 54.2 s) moved to 8-beat phrase lines: track 40→32 at film beat
+  50 (24.5 s) and 88→72 at film beat 106 (51.8 s). On the MP4 the envelope at 24.5 s matches an ordinary beat at 20.6 s.
+- Jerkiness: no camera shake, no cut flashes, no bar punches on 2D shots; the hard-cut snap-in is now a 2 % settle.
+  Speed ramps are softer (0.6–0.75× instead of 0.3–0.5×).
+- Highlights: the amber pick, the red Codex row and the Deny outline are drawn into the screen textures at the UI's own
+  pixel coordinates (`make_v7_faces.py`, faces `question-pick`, `ask-red`, `ask-deny`). The 3D tint cards are gone.
+- Keys: the 3D keyboard macro is replaced by a 2D shot (`scenes7/Keys7.tsx`). It stays in Claude's terminal after the
+  jump; the real panel holds two requests. ⌃⌥Y allows Claude's, and the panel becomes the one-waiting snapshot; ⌃⌥N
+  denies Codex's `rm -rf`, and the panel folds. The keys plate is no longer rendered.
+
+MP4: 71.85 s, 2154 frames, −14.0 LUFS, −1.5 dBTP. Plates: 11 shots, 529 s.
