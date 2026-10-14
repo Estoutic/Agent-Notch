@@ -201,14 +201,31 @@ const render = (file: string) => {
   if (!track) throw new Error(`music file public/${MUSIC_FILE7} is missing`);
   const edit = editMusic7(mus, track);
   if (process.env.V7_MUSIC_AUDIT) writeWav(process.env.V7_MUSIC_AUDIT, mus.L, mus.R);
-  const nA = filmT(NIGHT_MUSIC.from), nB = filmT(NIGHT_MUSIC.to), nG = Math.pow(10, -4 / 20);
-  const fiN = 0.5 * beatS, fiM = 0.25 * beatS;
-  for (let k = 0; k < n; k++) {
-    const t = k / SR;
-    let g = 1;
-    if (t >= nA && t < nB) g = nG * (t < nA + fiN ? 0.5 - 0.5 * Math.cos(Math.PI * (t - nA) / fiN) : 1);
-    else if (t >= nB && t < nB + fiM) g = nG + (1 - nG) * (0.5 - 0.5 * Math.cos(Math.PI * (t - nB) / fiM));
-    if (g !== 1) { mus.L[k] *= g; mus.R[k] *= g; }
+  // Under the lid: a resonant-free low-pass sweeps down on the latch (60 ms), holds, and opens over one beat as the lid
+  // swings open. No make-up gain: under the lid the track sits a little lower, never silent.
+  {
+    const tS = filmT(NIGHT_MUSIC.shut), tO = filmT(NIGHT_MUSIC.open), tE = tO + beatS, HI = 20000, LO = 650;
+    const fc = (t: number) => t < tS ? HI : t < tS + 0.06 ? HI * Math.pow(LO / HI, (t - tS) / 0.06)
+      : t < tO ? LO : t < tE ? LO * Math.pow(HI / LO, ((t - tO) / beatS) ** 1.6) : HI;
+    const k0 = Math.max(0, Math.round((tS - 0.05) * SR)), k1 = Math.min(n, Math.round((tE + 0.05) * SR));
+    const st = [[0, 0, 0, 0], [0, 0, 0, 0]];
+    let b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
+    const fadeK = Math.round(0.01 * SR);
+    for (let k = k0; k < k1; k++) {
+      const t = k / SR;
+      if ((k - k0) % 32 === 0) {
+        const w = 2 * Math.PI * Math.min(fc(t), 0.45 * SR) / SR, al = Math.sin(w) / (2 * Math.SQRT1_2), c = Math.cos(w), a0 = 1 + al;
+        b0 = (1 - c) / 2 / a0; b1 = (1 - c) / a0; b2 = b0; a1 = -2 * c / a0; a2 = (1 - al) / a0;
+      }
+      const gain = 1;
+      const edge = Math.min(1, (k - k0) / fadeK, (k1 - 1 - k) / fadeK);  // 10 ms crossfades from and back to the dry track
+      for (const [ch, x] of [[0, mus.L], [1, mus.R]] as const) {
+        const z = st[ch], v = x[k];
+        const y = b0 * v + b1 * z[0] + b2 * z[1] - a1 * z[2] - a2 * z[3];
+        z[1] = z[0]; z[0] = v; z[3] = z[2]; z[2] = y;
+        x[k] = v + (y * gain - v) * edge;
+      }
+    }
   }
 
   // sfx

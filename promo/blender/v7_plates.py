@@ -626,10 +626,20 @@ def shot_night(S):
     DIVE = 10
     ghosts = ghost_terms(ev, dive_at, DIVE, lambda: land, nrm_f)
 
+    LAND = 18   # the latch: shut - 0.3 beat, where the music goes under the lid
+
     def lid_at(lf):
+        # evening: a slow, held close down to a hand's width, then the last 12 degrees snap shut onto the latch
+        if lf < ev["open"] - 6:
+            if lf < LAND - 6:
+                return lerp(108, 12, ease(ss(-12, LAND - 6, lf), 2.0))
+            u = min(1.0, max(0.0, (lf - (LAND - 6)) / 6))
+            return 12 * (1 - u * u)
+        # morning: it cracks open (light at the seam), then swings up fast and settles, on the music's return
         if lf < ev["open"]:
-            return lerp(108, 0, ease(ss(-4, ev["shut"], lf), 2.4))   # shut all the way
-        return lerp(0, 106, ease(ss(ev["open"], ev["open"] + 14, lf), 2.0))
+            return 2.5 * ss(ev["open"] - 6, ev["open"], lf)
+        u = min(1.0, (lf - ev["open"]) / 12)
+        return lerp(2.5, 106, (1 - 2 ** (-9 * u)) / (1 - 2 ** -9))
 
     def frame(lf):
         a = lid_at(lf)
@@ -638,13 +648,15 @@ def shot_night(S):
         morning = ss(ev["dawn"] - 8, ev["dawn"] + 10, lf)
         night = ss(ev["shut"] - 6, ev["out"], lf)
         landed = sum(1 for t in dive_at if lf >= t + DIVE)
-        scr.show("awake" if lf < ev["open"] else f"morning-{landed}", 1.0 if lf < ev["open"] else lerp(0.4, 1.0, ss(ev["open"], ev["open"] + 10, lf)))
+        scr.show("awake" if lf < ev["open"] else f"morning-{landed}", 1.0 if lf < ev["open"] else lerp(0.6, 1.0, ss(ev["open"], ev["open"] + 4, lf)))
         # the light of the screen under the lid: a line that narrows and goes out, back when the lid opens
         gapk = 1 - ss(3, 12, a)
         out = 1 - ss(ev["shut"] + 2, ev["out"] + 6, lf)
         opening = ss(ev["open"], ev["open"] + 10, lf)
-        k = gapk * (max(out, 0.12) if lf < ev["open"] else 0.0) + opening * (1 - ss(14, 34, a)) * 0.8
-        leak.data.energy = 0.04 * k
+        pre = ss(ev["open"] - 8, ev["open"], lf)   # the seam lights up before the lid moves
+        squeeze = 1 - ss(4, 40, a) if lf < ev["shut"] else 0.0   # the closing gap pours its light onto the desk
+        k = gapk * (max(out, 0.12, pre) if lf < ev["open"] else 0.0) + opening * (1 - ss(20, 60, a)) * 1.2 + 0.25 * squeeze * (1 - gapk)
+        leak.data.energy = 0.04 * k * (1 + 0.6 * squeeze)
         line_k.inputs[1].default_value = 3.0 * k
         line.scale = (1.0, max(0.05, lerp(0.35, 1.0, out)), 1.0)
         line.hide_render = k < 0.01
@@ -670,15 +682,26 @@ def shot_night(S):
         loc = Vector((lerp(0.06, 0.0, tt), lerp(-0.80, -0.70, tt) - 0.30 * up, lerp(0.24, 0.21, tt) + 0.10 * up))
         tgt = Vector((0.0, -0.04 + 0.06 * up, lerp(0.10, 0.03, ss(-4, ev["shut"], lf)) + 0.12 * up))
         foc = Vector((0, -0.12 + 0.12 * up, 0.02 + 0.13 * up))
-        # morning: swing round to face the screen, then fly into it (ease-in, faster and faster) onto the toasts
-        g = ease(ss(ev["open"] - 6, ev["open"] + 14, lf), 2.0)
+        # the close and the open are one framing, low at the front edge: the seam of light runs across the frame
+        edge = Vector((0.0, -B.D / 2 * MM, gap_z))
+        w_close = ease(ss(-12, LAND - 2, lf), 2.0) * (1 - ease(ss(ev["out"] - 4, ev["out"] + 18, lf), 2.0))
+        w_open = ease(ss(ev["dawn"] - 16, ev["open"] - 4, lf), 2.0)
+        if w_close > 0:
+            low = Vector((0.0, -0.46 - 0.03 * ss(-12, LAND, lf), 0.06))
+            loc, tgt, foc = loc.lerp(low, w_close), tgt.lerp(edge + Vector((0, 0.05, 0.006)), w_close), foc.lerp(edge, w_close)
+        # the open: three-quarter front, a little above the deck, so the lid swings up towards the lens and its light fills the room
+        if w_open > 0:
+            q = Vector((-0.27 + 0.03 * ss(ev["dawn"] - 16, ev["open"] + 8, lf), -0.43, 0.11))   # sun side: the low sun is behind the lens
+            loc, tgt, foc = loc.lerp(q, w_open), tgt.lerp(Vector((0.0, -0.01, 0.07)), w_open), foc.lerp(Vector((0.0, -0.02, 0.06)), w_open)
+        # morning: rise with the lid to face the screen, then fly into it (ease-in, faster and faster) onto the toasts
+        g = ease(ss(ev["open"] + 1, ev["open"] + 16, lf), 2.0)
         if g > 0:
             nrm, ft = nrm_f, ft_f
             u = ss(ev["open"] + 22, n, lf)
             d = lerp(0.50, 0.045, u ** 2.6)
             fl = ft + nrm * d + Vector((0, 0, 0.03 * d))
             loc, tgt, foc = loc.lerp(fl, g), tgt.lerp(ft, g), foc.lerp(ft, g)
-        cam_set(cam, loc, tgt, 45, lerp(lerp(5.6, 8.0, up), 11.0, g), foc)
+        cam_set(cam, loc, tgt, 45, lerp(lerp(lerp(lerp(5.6, 8.0, up), 3.2, w_close), 5.6, w_open), 11.0, g), foc)
     return sc, frame
 
 

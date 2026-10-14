@@ -77,12 +77,31 @@ def wallpaper():
     return w
 
 
-def desktop(src, bar_only=False):
+def dawn_wallpaper():
+    """Night shot, after the lid opens: a sunrise wallpaper (deep blue at the top, warm orange low down), so the screen
+    wakes up warm and the dark toasts read on it."""
+    top, mid, low = (22, 30, 58), (120, 74, 92), (236, 140, 70)
+    w = Image.new("RGB", (DW, DH))
+    px = w.load()
+    col = []
+    for y in range(DH):
+        t = y / (DH - 1)
+        a, b, u = (top, mid, t / 0.55) if t < 0.55 else (mid, low, (t - 0.55) / 0.45)
+        col.append(tuple(round(a[i] + (b[i] - a[i]) * u) for i in range(3)))
+    for y in range(DH):
+        ImageDraw.Draw(w).line((0, y, DW, y), fill=col[y])
+    sun = Image.new("L", (DW, DH), 0)
+    ImageDraw.Draw(sun).ellipse((DW * 0.55, DH * 0.62, DW * 0.95, DH * 1.25), fill=255)
+    w.paste(Image.new("RGB", (DW, DH), (255, 196, 120)), (0, 0), sun.filter(ImageFilter.GaussianBlur(260)).point(lambda v: v * 0.8))
+    return w
+
+
+def desktop(src, bar_only=False, wall=None):
     src, kind = src if isinstance(src, tuple) else (src, None)
     shot = Image.open(os.path.join(PROMO, src))
     shot = (mark(shot, kind) if kind else shot).convert("RGB")
     s = shot.resize((round(shot.width * 2 / 3), round(shot.height * 2 / 3)), Image.LANCZOS)
-    d = wallpaper()
+    d = (wall or wallpaper)()
     # keep the snapshot's dark parts (notch bar, panel), drop its flat grey desktop and menu bar
     # the panel: everything under the menu bar that is not the snapshot's flat grey desktop (89, 89, 89)
     grey = s.point(lambda v: 255 if abs(v - 89) <= 4 else 0).convert("L").point(lambda v: 255 if v == 255 else 0)
@@ -227,7 +246,7 @@ def morning():
     morning-0 is the bare desktop with the bar, morning-k has k toasts. Toasts are the app's own ToastView renders
     (snap5/toast-night-<i>.png when present, else snap5/toast.png)."""
     mask = os.path.join(CACHE, "mask.png")
-    base = desktop("public/snap4/awake/sub.png", bar_only=True)
+    base = desktop("public/snap4/awake/sub.png", bar_only=True, wall=dawn_wallpaper)
     toasts = []
     for i in range(len(GHOST_TITLES)):
         p = os.path.join(PROMO, f"public/snap5/toast-night-{i}.png")

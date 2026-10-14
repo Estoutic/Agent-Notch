@@ -176,3 +176,9 @@ The six notes and what changed:
 6. **After the night.** The lid opens all the way. The five ghosts dive into the screen, nearest first. Each one lands as a real "done" toast from a different project (snap5/toast-night-0..4). The camera swings to face the screen and flies into it. Trust comes in with a new `through` transition (scale 0.86 → 1, blur 10 → 0). The light wash is gone. The captions are "Keep awake." and then "Done by morning."
 
 Known issue: the fly-through lands on trust's first frame, which has no text yet, so there are about 6 dark frames (around film frame 1624).
+
+## Owner notes, round 5
+
+- **Silence on the lid close (bug).** The MP4 dropped to −42 dB at 48.3–49.4 s, the deliberate 98.5–101 music hole. The track now runs on to beat 101. From the latch it is low-passed at 650 Hz, as if heard through the closed lid, and it opens back up over one beat as the lid swings open. The join to track 68 sits inside the muffle. The old −4 dB night dip is gone. Measured on the MP4: −13 to −15 dB through 47.5–55 s, −14.0 LUFS and −1.5 dBTP overall.
+- **Lid close.** Low at the front edge. The lid closes slowly to about 12°, then snaps shut on the latch, and the light from the gap narrows to a line across the frame. From there the camera cranes up to the ghosts.
+- **Lid open.** Three-quarter front from the sun side. The seam lights first and the lid cracks open about 2.5°, then swings up fast (expo-out, 12 frames). The screen wakes on a dawn wallpaper (`dawn_wallpaper` in make_v7_faces.py), with a whoosh, a boom and a sub under it. The camera then rises to face the screen.

@@ -73,7 +73,9 @@ export const local7 = (p: Placed7, beat: number) => beatFrame(p.startBeat + beat
  *   10-34     track 0-24; 34-50 track 32-48 (skip the first breakdown).
  *   50-98.5   track 0 onward: a full 0-24 section returns after 16 intervening beats; 32-48 returns after 32.
  *             The natural 24-32 breakdown plays at 74-82; there is no edit at its entrance or recovery.
- *   98.5-101  music silence; 101-147 fresh track 68 onward, dipped until 111, without a night-time loop.
+ *   50-101    the track runs on under the lid close (owner, round 5: no silence there); the join to track 68 at 101
+ *             sits inside the muffle (NIGHT_MUSIC), so it is not heard as a cut.
+ *   101-147   fresh track 68 onward, without a night-time loop.
  *             The measured final attack at 55.07565 s lands at 138.8; the track's decay runs through 147.
  * Artificial seams: film 34, track 24->32: mel cosine 0.9814, chroma 0.9716, RMS +0.65 dB;
  *                   film 50, track 48->0: mel cosine 0.9740, chroma 0.9650, RMS -0.40 dB (one beat each side).
@@ -83,11 +85,9 @@ export const MUSIC7: (MusicSeg & {rate?: number})[] = [
   {from: 0, to: 8, src: -8.081064603175, rate: 1.011814200680},
   {from: 10, to: 34, src: 0.013449002268, rate: 1.007907851474},
   {from: 34, to: 50, src: 32.261384792139, rate: 1.007948542611},
-  {from: 50, to: 98.5, src: 0.013449002268, rate: 1.007907851474},
+  {from: 50, to: 101, src: 0.013449002268, rate: 1.007907851474},
   {from: 101, to: 147, src: 68.541417029478, rate: 0.959572685335},
 ];
-/** Music under the night: dipped 4 dB from the night's entry to the morning. */
-export const NIGHT_MUSIC = {from: 101, to: 111};
 export const HIT7 = undefined; // the track's own final hit, measured at 55.07565 s; no synth hit
 export const HIT7_BEAT = 138.8;
 
@@ -130,10 +130,11 @@ const CUES7: Partial<Record<Shot7Id, Cue7[]>> = {
   question: [{b: 0, s: 'whoosh', d: 0.5, v: 0.4}, {b: EV7.question.pick, s: 'click'}, {b: EV7.question.pick + 0.05, s: 'approve', v: 0.8}],
   plan: [{b: 1.5, s: 'type', d: 1.5, v: 0.35}, {b: EV7.plan.approve, s: 'click'}, {b: EV7.plan.approve + 0.05, s: 'approve'}],
   risky: [{b: 0, s: 'sub', v: 0.9}, {b: 0, s: 'buzz', v: 0.7}, ...keyCombo(EV7.risky.tryKey, false).slice(0, 3), {b: EV7.risky.deny, s: 'click'}, {b: EV7.risky.deny + 0.05, s: 'deny'}],
-  night: [ // no whoosh: the night opens inside the pre-night silence (98.5-101)
-    {b: EV7.night.shut - 0.35, s: 'lid'}, {b: EV7.night.shut - 0.3, s: 'latch', v: 0.8}, // on the picture: the lid lands ahead of its event
+  night: [ // the lid lands on the latch (shut - 0.3); the music goes under the lid there and comes back as it opens
+    {b: EV7.night.shut - 0.35, s: 'lid'}, {b: EV7.night.shut - 0.3, s: 'latch', v: 0.9}, {b: EV7.night.shut - 0.3, s: 'sub', v: 0.6},
     {b: EV7.night.out, s: 'roomNight', d: EV7.night.dawn - EV7.night.out, v: 1}, {b: EV7.night.dawn, s: 'birds', d: 2.5, v: 0.6},
-    {b: EV7.night.open + 0.5, s: 'lid', v: 0.6, p: 1.2}, {b: EV7.night.open + 0.9, s: 'chime', p: 1.5, v: 0.5},
+    {b: EV7.night.open - 0.7, s: 'whoosh', d: 0.7, v: 0.5}, {b: EV7.night.open, s: 'lid', v: 0.7, p: 1.2},
+    {b: EV7.night.open, s: 'boom', v: 0.7}, {b: EV7.night.open, s: 'sub', v: 0.7}, {b: EV7.night.open + 0.9, s: 'chime', p: 1.5, v: 0.5},
   ],
   themes: [{b: 0, s: 'whoosh', d: 0.8, v: 0.45}, ...THEME_BEATS.map((b, i) => ({b, s: 'tick' as Sfx7, v: 0.45, p: 0.9 + i * 0.03}))],
   end: [{b: 0, s: 'whoosh', d: 0.5, v: 0.5}, {b: EV7.end.hit, s: 'sub'}, {b: EV7.end.install, s: 'type', d: 1, v: 0.45}],
@@ -159,4 +160,13 @@ export const cues7 = (shots: Shot7[] = V7): AbsCue[] => {
 export const ROOM7 = (() => {
   const n = place7().find((p) => p.id === 'night')!;
   return {nightFrom: n.from + local7(n, EV7.night.out), nightTo: n.from + local7(n, EV7.night.dawn), silenceFrom: beatFrame(98.5), silenceTo: beatFrame(101)};
+})();
+
+/**
+ * Music under the lid (owner, round 5): from the latch the track is low-passed as if heard through the closed lid; it
+ * opens back up over one beat as the lid swings open. Film beats.
+ */
+export const NIGHT_MUSIC = (() => {
+  const n = place7().find((p) => p.id === 'night')!;
+  return {shut: n.startBeat + EV7.night.shut - 0.3, open: n.startBeat + EV7.night.open};
 })();
