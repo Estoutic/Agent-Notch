@@ -31,13 +31,13 @@ export const V7: Shot7[] = [
   {id: 'title', beats: 3, kind: '2d', in: {type: 'dissolve', x: 6, note: 'the panel blurs into the title card'}},
   {id: 'states', beats: 5, kind: '2d', in: CUT},
   {id: 'anatomy', beats: 7, kind: '2d', k: 7 / 6, in: CUT},
-  {id: 'swarm', beats: 6, kind: '3d', in: {type: 'dissolve', x: 10, note: 'counters in the notch -> the city of 55 agents'}},
+  {id: 'swarm', beats: 6, kind: '3d', in: {type: 'dissolve', x: 6, note: 'counters in the notch -> the city of 55 agents'}},
   {id: 'open', beats: 5, kind: '3d', in: {type: 'dissolve', x: 8, note: 'the fly-over rises to the whole panel'}},
   {id: 'usage', beats: 5, kind: '2d', k: 1.25, in: {type: 'dissolve', x: 6, note: 'the panel row becomes the usage card'}},
   {id: 'jump', beats: 4, kind: '2d', in: CUT},
   {id: 'keys', beats: 6, kind: '3d', in: CUT}, // jump ends in a whip; the music jumps back to groove 2 on this cut
   {id: 'question', beats: 8, kind: '3d', in: {type: 'zoom', x: 6, note: 'the pressed key becomes the next panel button'}},
-  {id: 'plan', beats: 10, kind: '3d', in: {type: 'dissolve', x: 8, note: 'answered question -> the plan on the same panel'}},
+  {id: 'plan', beats: 10, kind: '3d', in: {type: 'dissolve', x: 5, note: 'answered question -> the plan on the same panel'}},
   {id: 'risky', beats: 10, kind: '3d', in: CUT}, // cut on the breakdown: everything goes dark, the red row lights the desk
   {id: 'card', beats: 11, kind: '2d', k: 11 / 9, in: {type: 'zoom', x: 6, note: 'the red row becomes the Deny chip, then the card'}},
   {id: 'toast', beats: 4, kind: '2d', in: CUT},

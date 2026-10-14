@@ -124,23 +124,23 @@ def press(lf, at, down=2, hold=6, up=3):
     return 1 - ss(at + hold, at + hold + up, lf)
 
 
-def tint_card(hinge, sx, sy, w_mm, h_mm):
-    """A red glow sitting a hair in front of the glass over one row: the row lights up."""
+def tint_card(hinge, sx, sy, w_mm, h_mm, color=(1.0, 0.05, 0.03), name="Tint"):
+    """A glow (red by default) sitting a hair in front of the glass over one row: the row lights up."""
     from mathutils import Matrix
     nrm = B.screen_normal(hinge)
     bpy.ops.mesh.primitive_plane_add(size=1)
     ob = bpy.context.active_object
-    ob.name = "Tint"
+    ob.name = name
     rot = Vector((0, 0, 1)).rotation_difference(nrm)
     ob.matrix_world = Matrix.LocRotScale(B.stage_point(hinge, sx, sy) + nrm * 0.0012, rot, Vector((w_mm * MM, h_mm * MM, 1)))
-    m = bpy.data.materials.new("Tint")
+    m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
     for nd in list(nt.nodes):
         nt.nodes.remove(nd)
     em = nt.nodes.new("ShaderNodeEmission")
     em.name = "Emission"
-    em.inputs["Color"].default_value = (1.0, 0.05, 0.03, 1)
+    em.inputs["Color"].default_value = (*color, 1)
     tr = nt.nodes.new("ShaderNodeBsdfTransparent")
     add = nt.nodes.new("ShaderNodeAddShader")
     out = nt.nodes.new("ShaderNodeOutputMaterial")
@@ -157,7 +157,7 @@ def tint_card(hinge, sx, sy, w_mm, h_mm):
     mul.blend_type = 'MULTIPLY'
     mul.inputs[0].default_value = 1.0
     nt.links.new(grad.outputs["Fac"], mul.inputs[1])
-    mul.inputs[2].default_value = (1.0, 0.05, 0.03, 1)
+    mul.inputs[2].default_value = (*color, 1)
     nt.links.new(mul.outputs[0], em.inputs["Color"])
     nt.links.new(em.outputs[0], add.inputs[0])
     nt.links.new(tr.outputs[0], add.inputs[1])
@@ -228,12 +228,12 @@ def shot_cascade(S):
 
 def shot_reveal(S):
     """The amber period is the mark in the notch: macro on the notch, then the pull-back to the laptop on the drop."""
-    sc, cam, hinge = scene("bar-ask", samples=S)
-    scr = Screen(["bar-ask"])
+    sc, cam, hinge = scene("bar-ask", screen=1.5, samples=S)
+    scr = Screen(["bar-ask", "ask"])
     n = PLAN["shots"]["reveal"]["len"]
 
     def frame(lf):
-        scr.show("bar-ask")
+        scr.show("bar-ask" if lf < 16 else "ask", 1.5)  # the panel drops open on the pull-back
         loc, tgt, lens, fstop, focus = B.shot_reveal(max(0, lf), n, hinge)
         cam_set(cam, loc, tgt, lens, fstop, focus)
     return sc, frame
@@ -366,7 +366,7 @@ LEGENDS = {"ctrl": [("control", 2.4, 0.0, -0.28), ("^", 3.6, 0.28, 0.22)], "opt"
 
 def shot_keys(S):
     """Macro of the keyboard: ⌃⌥Y goes down on the kick, then ⌃⌥N; the request screen glows out of focus behind."""
-    sc, cam, hinge = scene("ask", screen=1.1, key=0.8, fill=0.7, samples=S)
+    sc, cam, hinge = scene("ask", screen=1.1, key=0.5, fill=0.5, samples=S)
     scr = Screen(["ask", "sub"])
     keys, rects = split_keys()
     ev = PLAN["shots"]["keys"]["ev"]
@@ -382,11 +382,11 @@ def shot_keys(S):
                   "opt": max(press(lf, ev["y"] - 0.1 * fpb), press(lf, ev["n"] - 0.1 * fpb)),
                   "y": press(lf, ev["y"]), "n": press(lf, ev["n"])}
         for nm, ob in keys.items():
-            ob.location.z = -0.5 * MM * travel[nm]  # keys stand 0.75 mm proud of the deck
-            bpy.data.materials[ob["ink"]].node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.08 + 1.6 * travel[nm]
+            ob.location.z = -0.6 * MM * travel[nm]  # keys stand 0.75 mm proud of the deck
+            bpy.data.materials[ob["ink"]].node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.08 + 4.0 * travel[nm]
         t = ease((lf + HANDLE) / (n + HANDLE), 2.0)
         mods = (pos["ctrl"] + pos["opt"]) / 2
-        aim = mods.lerp((pos["y"] + pos["n"]) / 2, 0.5)
+        aim = mods.lerp((pos["y"] + pos["n"]) / 2, 0.56)
         loc = aim + Vector((lerp(-0.026, -0.022, t), lerp(-0.120, -0.105, t), lerp(0.140, 0.122, t)))
         cam_set(cam, loc, aim, 45, 11.0, aim, roll=0)
     return sc, frame
@@ -406,17 +406,21 @@ def shot_question(S):
     a_l = opt + nrm * 0.07 + SIDE * 0.02 + Vector((0, 0, -0.02))
     b_l = req + nrm * 0.27 + SIDE * 0.11 + Vector((0, 0, -0.10))
 
+    pick = tint_card(hinge, 783, 339, 66, 6.6, color=(1.0, 0.62, 0.08), name="Pick")
+
     def frame(lf):
-        scr.show("question" if lf < ev["pick"] + 4 else "sub")
+        scr.show("question" if lf < ev["pick"] + 10 else "sub")
+        on = ss(ev["pick"] - 2, ev["pick"], lf) * (1 - ss(ev["pick"] + 8, ev["pick"] + 10, lf))
+        pick.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.5 * on
         e = ease(ss(-HANDLE, 34, lf), 3.0)
         creep = ss(34, n, lf)
         loc = a_l.lerp(b_l, e) + (req - b_l) * 0.12 * creep
         tgt = opt.lerp(req.lerp(notch, 0.10), e)
         # once answered the panel shrinks to the bar: follow it up to the notch so the shot never ends on a tiny card
-        c2 = ease(ss(ev["pick"] + 4, ev["pick"] + 40, lf), 2.0)
+        c2 = ease(ss(ev["pick"] + 10, ev["pick"] + 40, lf), 2.0)
         loc = loc.lerp(B.stage_point(hinge, 900, 120) + nrm * 0.15 + SIDE * 0.05 + Vector((0, 0, -0.035)), c2)
         tgt = tgt.lerp(B.stage_point(hinge, 900, 110), c2)
-        cam_set(cam, loc, tgt, 50, lerp(2.8, 5.6, e), opt.lerp(B.stage_point(hinge, 700, 360), e))
+        cam_set(cam, loc, tgt, 50, lerp(4.0, 5.6, e), opt.lerp(B.stage_point(hinge, 700, 360), e))
     return sc, frame
 
 
@@ -460,21 +464,26 @@ def shot_risky(S):
     focus = B.stage_point(hinge, 700, 490)
     wide_l = Vector((0.17, -0.36, 0.10))
     wide_t = B.stage_point(hinge, 760, 760)
-    tint = tint_card(hinge, 690, 487, 70, 9)
+    tint = tint_card(hinge, 633, 493, 32, 4.5)
+    dpt = B.stage_point(hinge, 601, 533)
+    deny = tint_card(hinge, 601, 533, 10, 4.0, color=(1.0, 0.85, 0.8), name="DenyHot")
+    loc_d = dpt + nrm * 0.16 + SIDE * 0.05 + Vector((0, 0, -0.05))
 
     def frame(lf):
-        on = ss(-HANDLE, 6, lf) * (1 - ss(ev["deny"], ev["deny"] + 8, lf))
+        on = ss(-HANDLE, 6, lf) * (1 - ss(ev["deny"] + 2, ev["deny"] + 14, lf))
+        hot = ss(ev["deny"] - 3, ev["deny"], lf) * (1 - ss(ev["deny"] + 3, ev["deny"] + 8, lf))
+        deny.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.6 * hot
         pulse = 0.85 + 0.15 * math.sin(lf / 30 * 2 * math.pi * 1.0)
         red.data.energy = 40.0 * on * pulse
         red_low.data.energy = 55.0 * on * pulse
         scr.show("ask" if lf < ev["deny"] + 2 else "sub", 1.0 - 0.25 * on)
-        tint.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.32 * on * pulse
+        tint.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.22 * on * pulse
         push = ease(ss(-HANDLE, ev["tryKey"] + 10, lf), 2.0)
-        wide = ease(ss(ev["move"] - 14, ev["deny"] - 6, lf), 3.0)
-        loc = (focus + (base_l - focus) * lerp(1.0, 0.85, push)).lerp(wide_l, wide)
-        drift = ss(ev["deny"], n, lf)
-        loc += Vector((0, -0.04 * drift, 0.01 * drift))
-        cam_set(cam, loc, base_t.lerp(wide_t, wide), lerp(50, 40, wide), lerp(5.6, 8.0, wide), focus)
+        m = ease(ss(ev["move"] - 6, ev["move"] + 24, lf), 3.0)
+        wide = ease(ss(ev["deny"] + 4, ev["deny"] + 34, lf), 3.0)
+        loc = (focus + (base_l - focus) * lerp(1.0, 0.85, push)).lerp(loc_d, m).lerp(wide_l, wide)
+        tgt = base_t.lerp(dpt, m).lerp(wide_t, wide)
+        cam_set(cam, loc, tgt, lerp(50, 40, wide), lerp(5.6, 8.0, wide), focus.lerp(dpt, m).lerp(wide_t, wide))
     return sc, frame
 
 
@@ -521,7 +530,7 @@ def shot_night(S):
         gapk = 1 - ss(3, 12, a)
         out = 1 - ss(ev["shut"] + 2, ev["out"] + 6, lf)
         opening = ss(ev["open"], ev["open"] + 10, lf)
-        k = gapk * (out if lf < ev["open"] else 0.0) + opening * (1 - ss(14, 34, a)) * 0.8
+        k = gapk * (max(out, 0.22) if lf < ev["open"] else 0.0) + opening * (1 - ss(14, 34, a)) * 0.8
         leak.data.energy = 0.04 * k
         line_k.inputs[1].default_value = 3.0 * k
         line.scale = (1.0, max(0.05, lerp(0.35, 1.0, out)), 1.0)
@@ -558,7 +567,7 @@ def shot_themes(S):
     """One low arc; each theme recolours the room through the screen's own light."""
     ev = PLAN["shots"]["themes"]["ev"]
     order = ev["order"]
-    sc, cam, hinge = scene(f"theme-{order[0]}", screen=1.0, key=0.3, fill=0.35, samples=S)
+    sc, cam, hinge = scene(f"theme-{order[0]}", screen=0.6, key=0.3, fill=0.35, samples=S)
     scr = Screen([f"theme-{t}" for t in order])
     n = PLAN["shots"]["themes"]["len"]
     B.set_lid(hinge, 108)
@@ -573,7 +582,7 @@ def shot_themes(S):
         prev = THEME_LIGHT[order[max(0, i - 1)]]
         k = ss(ev["starts"][i], ev["starts"][i] + 3, lf) if i else 1.0
         spill.data.color = Vector(prev).lerp(Vector(THEME_LIGHT[tid]), k)
-        spill.data.energy = 2.2
+        spill.data.energy = 0.6
         loc, tgt, lens, fstop, focus = B.shot_themes(max(0, lf + HANDLE), n + HANDLE, hinge)
         cam_set(cam, loc, tgt, lens, fstop, focus)
     return sc, frame
@@ -581,12 +590,12 @@ def shot_themes(S):
 
 def shot_end(S):
     """One slow orbit of the laptop on the desk; the type sits above it in 2D."""
-    sc, cam, hinge = scene("bar-one", samples=S)
-    scr = Screen(["bar-one"])
+    sc, cam, hinge = scene("one", screen=1.6, studio=False, samples=S)
+    scr = Screen(["one"])
     n = PLAN["shots"]["end"]["len"]
 
     def frame(lf):
-        scr.show("bar-one")
+        scr.show("one")
         t = (lf + HANDLE) / (n + HANDLE)
         e = B.ease_sine(t)
         B.set_lid(hinge, lerp(110, 104, e))

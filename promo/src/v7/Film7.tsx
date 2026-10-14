@@ -105,8 +105,8 @@ const Question: React.FC = () => {
   const {f, len} = use3D();
   return (
     <>
-      {shade('left', 0.6)}
-      <Cap f={f} from={4} to={len + 1} V={false} ly={760} sub="One click sends it.">Questions get<br />answered here.</Cap>
+      {shade('right', 0.65)}
+      <Cap f={f} from={30} to={len + 1} V={false} ly={760} lx={1350} sub="One click sends it.">Questions get<br />answered here.</Cap>
     </>
   );
 };
@@ -126,11 +126,12 @@ const Risky: React.FC = () => {
   const {f, ev, len} = use3D();
   return (
     <>
-      {shade('left', 0.65)}
-      <Cap f={f} from={4} to={ev.move + 2} V={false} ly={700} color="#ff6b61" sub={<>rm -rf, sudo,<br />git push --force, curl | sh</>}>Risky commands<br />turn red.</Cap>
+      {shade('right', 0.65)}
+      {shade('left', 0.5)}
+      <Cap f={f} from={4} to={ev.move + 2} V={false} ly={700} lx={1350} color="#ff6b61" sub={<>rm -rf, sudo,<br />git push --force, curl | sh</>}>Risky commands<br />turn red.</Cap>
       <Cap f={f} from={ev.move + 4} to={ev.deny + 2} V={false} ly={760} sub="No hotkey can allow them.">They take<br />a click.</Cap>
       <Cap f={f} from={ev.deny + 4} to={len + 1} V={false} ly={760} sub={<>The agent is told no<br />and moves on.</>}>Denied.</Cap>
-      <ComboAt at={ev.tryKey} keys={['⌃', '⌥', 'Y']} tone={C.red} x={120} y={420} />
+      <ComboAt at={ev.tryKey} keys={['⌃', '⌥', 'Y']} tone={C.red} x={1350} y={480} />
     </>
   );
 };
@@ -174,7 +175,7 @@ const End: React.FC = () => {
   return (
     <>
       <AbsoluteFill style={{background: 'linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.35) 55%, transparent 75%)'}} />
-      <div style={{position: 'absolute', left: 0, right: 0, top: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'scale(0.82)', transformOrigin: '50% 0'}}>
+      <div style={{position: 'absolute', left: 0, right: 0, top: 140, display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'scale(0.82)', transformOrigin: '50% 0'}}>
         <div style={{display: 'flex', alignItems: 'center', gap: 34, opacity: nameIn, transform: `translateY(${(1 - nameIn) * 24}px) scale(${1 + 0.035 * hit})`,
           filter: hit > 0.02 ? `drop-shadow(0 0 ${40 * hit}px rgba(255,255,255,${0.5 * hit}))` : undefined}}>
           <Img src={icon} style={{width: 128, height: 128, borderRadius: 29}} />
