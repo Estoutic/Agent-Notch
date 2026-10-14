@@ -2,18 +2,19 @@
  * v7 card and toast from the app's real renders: public/snap5/card-<tab>.png (CardView on each tab, 340 pt wide @2x),
  * snap5/toast.png (ToastView) and the journey list and wing (snap5/list). Timing, camera, captions and cursor as in v4.
  */
-import React from 'react';
-import {Img, staticFile} from 'remotion';
-import {Cursor, Ripple, camAt, cursorPath, easeIn, easeIO, expoOut, range, toScreen, useShot, useV} from '../../lib';
+import React, {useContext} from 'react';
+import {Img, staticFile, useCurrentFrame} from 'remotion';
+import {Cursor, Ripple, ShotCtx, camAt, cursorPath, easeIn, easeIO, expoOut, range, toScreen, useShot, useV} from '../../lib';
 import {NOTCH_CX} from '../../world';
 import {Caption} from '../../scenes/common';
+import {EV7, local7, type Placed7} from '../timeline7';
 import {Desk7, JOURNEY, JOURNEY_DONE, JOURNEY_MARK0, RealPanel7, RealWing7} from './world7';
 
-export type CardTab = 'done' | 'remaining' | 'files' | 'log';
+export type CardTab = 'done' | 'remaining' | 'files' | 'log' | 'prompts';
 /** The card sits right of the list; 680 x 840 stage px (the render's own pixels). */
 export const CARD7 = {x: 1190, y: 77, w: 680, h: 840};
 /** Tab pills in the render: x ranges and the row's centre y (card pixels). */
-const PILL: Record<CardTab, [number, number]> = {done: [20, 107], remaining: [120, 264], files: [277, 358], log: [371, 442]};
+const PILL: Record<CardTab, [number, number]> = {done: [20, 107], remaining: [120, 264], files: [277, 358], log: [371, 442], prompts: [455, 577]};
 const PILL_Y = [230, 266] as const;
 export const tabAt = (id: CardTab) => ({x: CARD7.x + (PILL[id][0] + PILL[id][1]) / 2, y: CARD7.y + (PILL_Y[0] + PILL_Y[1]) / 2});
 
@@ -30,13 +31,15 @@ export const AgentCard7: React.FC<{tab: CardTab; tabT: number; prev: CardTab; ho
 };
 
 export const CardShot7: React.FC = () => {
-  const {f, ev, len} = useShot('card');
+  const p = useContext(ShotCtx) as unknown as Placed7;
+  const f = useCurrentFrame(), len = p.to - p.from;
+  const ev = Object.fromEntries(Object.entries(EV7.card).map(([k, v]) => [k, local7(p, v)])) as Record<CardTab, number>;
   const {W, V} = useV();
   const cx = CARD7.x + CARD7.w / 2, cy = CARD7.y + CARD7.h / 2;
   const cam = camAt(f, V
     ? [{f: 0, s: 0.62, fx: 1130, fy: 420, ax: W / 2, ay: 700}, {f: 16, s: 1.42, fx: cx, fy: cy, ax: W / 2, ay: 780, e: expoOut}, {f: len, s: 1.46, fx: cx, fy: cy, ax: W / 2, ay: 780}]
     : [{f: 0, s: 0.72, fx: 1130, fy: 420, ax: W / 2, ay: 500}, {f: 16, s: 1.0, fx: cx, fy: cy, ax: 760, ay: 545, e: expoOut}, {f: len, s: 1.03, fx: cx, fy: cy, ax: 760, ay: 545}]);
-  const order: [CardTab, number][] = [['done', ev.done], ['remaining', ev.remaining], ['files', ev.files], ['log', ev.log]];
+  const order: [CardTab, number][] = [['done', ev.done], ['remaining', ev.remaining], ['files', ev.files], ['log', ev.log], ['prompts', ev.prompts]];
   let tab: CardTab = 'done', prev: CardTab = 'done', at = -100;
   for (let i = 0; i < order.length; i++) if (f >= order[i][1]) { tab = order[i][0]; prev = order[Math.max(0, i - 1)][0]; at = order[i][1]; }
   const tabT = at < 0 ? 1 : range(f, at, at + 6, easeIO);
@@ -46,7 +49,8 @@ export const CardShot7: React.FC = () => {
     {from: 14, arrive: ev.remaining - 3, a: start, b: pts[0], click: ev.remaining},
     {from: ev.remaining + 8, arrive: ev.files - 3, a: pts[0], b: pts[1], click: ev.files},
     {from: ev.files + 8, arrive: ev.log - 3, a: pts[1], b: pts[2], click: ev.log},
-  ], ev.log + 12);
+    {from: ev.log + 8, arrive: ev.prompts - 3, a: pts[2], b: pts[3], click: ev.prompts},
+  ], ev.prompts + 12);
   const nextId = order.find(([, t]) => t > f)?.[0];
   const nextAt = order.find(([, t]) => t > f)?.[1] ?? 1e9;
   const captions: Record<CardTab, [string, string]> = {
@@ -54,6 +58,7 @@ export const CardShot7: React.FC = () => {
     remaining: ['Remaining', 'its plan, step by step'],
     files: ['Files', 'every change, lines added and removed'],
     log: ['Log', 'commands, errors and loops'],
+    prompts: ['Prompts', 'every prompt you gave it'],
   };
   return (
     <Desk7 f={f} cam={cam} screen={{wing: {items: []},

@@ -139,7 +139,7 @@ def main():
         print("wrote", name)
 
 
-if __name__ == "__main__" and not {"--terms", "--ghosts"} & set(__import__("sys").argv):
+if __name__ == "__main__" and not {"--terms", "--ghosts", "--morning"} & set(__import__("sys").argv):
     main()
 
 
@@ -216,3 +216,38 @@ if __name__ == "__main__" and "--terms" in __import__("sys").argv:
     terminals()
 if __name__ == "__main__" and "--ghosts" in __import__("sys").argv:
     ghosts()
+
+
+# ---------------------------------------------------------------- v7 animatic: the morning after the night
+TOAST_W, TOAST_GAP, TOAST_Y = 728, 16, 80   # stage px (@2x): ToastView is 364 pt wide, under the notch (Finish7.tsx)
+
+
+def morning():
+    """Night shot, after the lid opens: one "done" toast per ghost terminal stacks up under the notch.
+    morning-0 is the bare desktop with the bar, morning-k has k toasts. Toasts are the app's own ToastView renders
+    (snap5/toast-night-<i>.png when present, else snap5/toast.png)."""
+    mask = os.path.join(CACHE, "mask.png")
+    base = desktop("public/snap4/awake/sub.png", bar_only=True)
+    toasts = []
+    for i in range(len(GHOST_TITLES)):
+        p = os.path.join(PROMO, f"public/snap5/toast-night-{i}.png")
+        im = Image.open(p if os.path.exists(p) else os.path.join(PROMO, "public/snap5/toast.png")).convert("RGBA")
+        toasts.append(im.resize((TOAST_W, round(im.height * TOAST_W / im.width)), Image.LANCZOS))
+    for k in range(len(toasts) + 1):
+        d = base.copy().convert("RGBA")
+        y = TOAST_Y
+        for t in toasts[:k][::-1]:   # the newest on top, the older ones pushed down
+            x = SX0 + 976 - TOAST_W // 2
+            sh = Image.new("RGBA", d.size, (0, 0, 0, 0))
+            ImageDraw.Draw(sh).rounded_rectangle((x, y + 18, x + TOAST_W, y + t.height + 18), radius=26, fill=(0, 0, 0, 150))
+            d = Image.alpha_composite(d, sh.filter(ImageFilter.GaussianBlur(24)))
+            d.alpha_composite(t, (x, y))
+            y += t.height + TOAST_GAP
+        d = d.convert("RGB")
+        d.save(os.path.join(OUT, f"desktop-morning-{k}.png"))
+        face(d, mask).save(os.path.join(OUT, f"face-morning-{k}.png"))
+    print("wrote", len(toasts) + 1, "morning faces")
+
+
+if __name__ == "__main__" and "--morning" in __import__("sys").argv:
+    morning()

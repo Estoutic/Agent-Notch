@@ -15,7 +15,7 @@ export {FPS, FPB, OFFSET_FRAMES, beatFrame};
 export type Shot7Id = ShotId | 'swarm' | 'night';
 export type Kind = '2d' | '3d';
 /** How the shot comes in: cut, or a dissolve/match of `x` frames over the end of the previous shot. */
-export type Trans = {type: 'cut'} | {type: 'dissolve' | 'zoom' | 'flash' | 'light'; x: number; note: string};
+export type Trans = {type: 'cut'} | {type: 'dissolve' | 'zoom' | 'flash' | 'light' | 'through'; x: number; note: string};
 export type Shot7 = {id: Shot7Id; beats: number; kind: Kind; k?: number; in?: Trans};
 
 /** Frames rendered before frame 0 of every 3D plate. */
@@ -42,7 +42,7 @@ export const V7: Shot7[] = [
   {id: 'card', beats: 11, kind: '2d', k: 11 / 9, in: {type: 'zoom', x: 4, note: 'the red row becomes the Deny chip, then the card'}},
   {id: 'toast', beats: 4, kind: '2d', in: CUT},
   {id: 'night', beats: 12, kind: '3d', in: {type: 'dissolve', x: 6, note: 'the toast becomes the closing lid'}},
-  {id: 'trust', beats: 5, kind: '2d', in: {type: 'light', x: 6, note: 'the lid light line becomes the morning'}},
+  {id: 'trust', beats: 5, kind: '2d', in: {type: 'through', x: 8, note: 'the camera flies into the screen; the next shot opens beyond it'}},
   {id: 'sounds', beats: 4, kind: '2d', in: CUT},
   {id: 'themes', beats: 8, kind: '3d', in: CUT},
   {id: 'presets', beats: 3, kind: '2d', in: CUT},
@@ -65,31 +65,31 @@ export const LEN7 = beatFrame(V7.reduce((a, s) => a + s.beats, 0));
 export const local7 = (p: Placed7, beat: number) => beatFrame(p.startBeat + beat) - p.from;
 
 /*
- * Music edit (v4 track, music-suno-v2-4.wav). Film beat = track beat + offset; every jump keeps offset = 2 (mod 4), so
- * the track's bars stay on the film's bar lines. Track: groove 0-24, breakdown 24-32, groove 32-56, breakdown 56-64,
- * groove 64-103 (softer 89-96), final hit 104.8.
- *   0-8     intro (as v4)
- *   8-10    dead stop: "You."
- *   10-50   drop and groove, offset 10 (as v4): the first breakdown sits under swarm (34-42)
- *   50-98.5 on the cut to jump the track restarts groove 2 from its top (track 32, offset 18): a whole 8-beat phrase
- *           repeats, no mid-phrase jump; breakdown 2 = risky (74-82)
- *   98.5-101 silence before the night (room tone only)
- *   101-106 the night enters on the same offset (track 83), dipped 4 dB
- *   106-     back four bars on a phrase line inside the night (track 88 -> 72, offset 34): the morning at 111 is track
- *           77 as before, and the final hit lands at film beat 138.8 = end + 1.8 (v4: 1.81)
- * Every jump lands on a phrase line of the track (sections start at 0, 24, 32, 56, 64; phrases are 8 beats).
+ * Measured music edit (music-suno-v2-4.wav): librosa beat tracking, then onset/attack refinement at 22050 Hz.
+ * `src` is a fractional coordinate in srcT's nominal grid; `rate` is pitch-preserving source seconds / film seconds.
+ * Musical bar 24 = 15.76966 s (+99.10 ms), 32 = 19.69887 s (+127.45 ms), 48 = 27.56259 s (+189.47 ms),
+ * 68 = 37.38925 s (+264.00 ms). Strongest nearby hits can be sixteenth notes, so the tracked bar phase wins.
+ *   0-8       intro; 8-10 dead stop; measured drop attack lands at film 10.
+ *   10-34     track 0-24; 34-50 track 32-48 (skip the first breakdown).
+ *   50-98.5   track 0 onward: a full 0-24 section returns after 16 intervening beats; 32-48 returns after 32.
+ *             The natural 24-32 breakdown plays at 74-82; there is no edit at its entrance or recovery.
+ *   98.5-101  music silence; 101-147 fresh track 68 onward, dipped until 111, without a night-time loop.
+ *             The measured final attack at 55.07565 s lands at 138.8; the track's decay runs through 147.
+ * Artificial seams: film 34, track 24->32: mel cosine 0.9814, chroma 0.9716, RMS +0.65 dB;
+ *                   film 50, track 48->0: mel cosine 0.9740, chroma 0.9650, RMS -0.40 dB (one beat each side).
+ * Renderer: 40 ms complementary crossfades; waveform alignment removes atempo's attack shift.
  */
-export const MUSIC7: MusicSeg[] = [
-  {from: 0, to: 8, src: -8},
-  {from: 10, to: 50, src: 0},
-  {from: 50, to: 98.5, src: 32},
-  {from: 101, to: 106, src: 83},
-  {from: 106, to: 147, src: 72},
+export const MUSIC7: (MusicSeg & {rate?: number})[] = [
+  {from: 0, to: 8, src: -8.081064603175, rate: 1.011814200680},
+  {from: 10, to: 34, src: 0.013449002268, rate: 1.007907851474},
+  {from: 34, to: 50, src: 32.261384792139, rate: 1.007948542611},
+  {from: 50, to: 98.5, src: 0.013449002268, rate: 1.007907851474},
+  {from: 101, to: 147, src: 68.541417029478, rate: 0.959572685335},
 ];
 /** Music under the night: dipped 4 dB from the night's entry to the morning. */
 export const NIGHT_MUSIC = {from: 101, to: 111};
-export const HIT7 = undefined; // the track's own final hit (track beat 104.8) plays out; no synth hit
-export const HIT7_BEAT = 104.8 + 34;
+export const HIT7 = undefined; // the track's own final hit, measured at 55.07565 s; no synth hit
+export const HIT7_BEAT = 138.8;
 
 /* ---------- events of the 3D shots and new shots, in beats from the shot start ---------- */
 export const EV7 = {
@@ -99,10 +99,11 @@ export const EV7 = {
   swarm: {flip: 1.5, caption: 0.5, rise: 4.5},
   open: EV.open,
   keys: {y: 1.5, n: 3.75},
+  card: {done: 0.6, remaining: 2.75, files: 4.9, log: 7.05, prompts: 9.2},
   question: {pick: 3.5, resume: 4.25},
   plan: {approve: 6},
   risky: {tryKey: 1.75, move: 4, deny: 6.75},
-  night: {shut: 1.5, out: 2.25, dawn: 9.0, open: 10.0},
+  night: {shut: 1.5, out: 2.25, dawn: 7.6, open: 8.1},
   themes: {first: 0},
   end: {hit: HIT7_BEAT - 137, install: 2.6, url: 4.0},
 } as const;
@@ -124,6 +125,7 @@ const CUES7: Partial<Record<Shot7Id, Cue7[]>> = {
     {b: EV7.swarm.rise, s: 'whoosh', d: 1.2, v: 0.45},
   ],
   open: [{b: 0, s: 'whoosh', d: 0.6, v: 0.4}, ...SHOT_CUES.open],
+  card: [{b: 0, s: 'whoosh', d: 0.4, v: 0.6}, ...(['done', 'remaining', 'files', 'log', 'prompts'] as const).map((t) => ({b: EV7.card[t], s: 'click' as Sfx7, v: 0.7}))],
   keys: [{b: 0, s: 'sub', v: 0.7}, ...keyCombo(EV7.keys.y, true), ...keyCombo(EV7.keys.n, false)],
   question: [{b: 0, s: 'whoosh', d: 0.5, v: 0.4}, {b: EV7.question.pick, s: 'click'}, {b: EV7.question.pick + 0.05, s: 'approve', v: 0.8}],
   plan: [{b: 1.5, s: 'type', d: 1.5, v: 0.35}, {b: EV7.plan.approve, s: 'click'}, {b: EV7.plan.approve + 0.05, s: 'approve'}],

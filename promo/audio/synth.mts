@@ -464,10 +464,12 @@ const render = (shots: ShotDef[], segs: MusicSeg[], hit: number | undefined, fil
 };
 
 /** The loudnorm master (second pass, linear) used by every film: raw wav in, mastered 16-bit wav out. */
-export const master = (tmp: string, file: string) => {
+export const master = (tmp: string, file: string, peakGuard = false) => {
   const m1 = measure(tmp);
   const ln = `loudnorm=I=${LUFS}:TP=${TP}:LRA=11:measured_I=${m1.input_i}:measured_TP=${m1.input_tp}:measured_LRA=${m1.input_lra}:measured_thresh=${m1.input_thresh}:offset=${m1.target_offset}:linear=true`;
-  const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', tmp, '-af', `${ln},aresample=${SR}`, '-c:a', 'pcm_s16le', '-ar', String(SR), file]);
+  // Oversampled ceiling guard for v7: loudnorm's linear pass can overshoot its requested true peak.
+  const guard = peakGuard ? `,aresample=192000,alimiter=limit=${Math.pow(10, (TP - 0.1) / 20)}:level=false:latency=true` : '';
+  const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', tmp, '-af', `${ln}${guard},aresample=${SR}`, '-c:a', 'pcm_s16le', '-ar', String(SR), file]);
   if (r.status !== 0) throw new Error(`ffmpeg master failed: ${r.stderr}`);
   unlinkSync(tmp);
   return measure(file);

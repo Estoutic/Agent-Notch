@@ -125,11 +125,12 @@ const Risky: React.FC = () => {
 };
 
 const Night: React.FC = () => {
-  const {f, len} = use3D();
+  const {f, ev, len} = use3D();
   return (
     <>
       {shade('bottom', 0.5)}
-      <Cap f={f} from={4} to={len + 1} V={false} ly={820} sub="The Mac stays on with the lid closed.">Keep awake.</Cap>
+      <Cap f={f} from={4} to={ev.open} V={false} ly={820} sub="The Mac stays on with the lid closed.">Keep awake.</Cap>
+      <Cap f={f} from={ev.open + 16} to={len - 10} V={false} ly={820} sub="Five agents finished overnight.">Done by morning.</Cap>
       <div style={{position: 'absolute', right: 60, top: 48, fontFamily: BODY, fontWeight: 600, fontSize: 22, letterSpacing: 4, color: 'rgba(255,255,255,0.6)'}}>DRAMATISATION</div>
     </>
   );
@@ -215,7 +216,9 @@ const TransIn: React.FC<{p: Placed7; x: number; type: string}> = ({p, x, type}) 
   const style: React.CSSProperties =
     type === 'zoom'
       ? {opacity: range(t, 0, 0.6), transform: `scale(${1.18 - 0.18 * range(t, 0, 1, expoOut)})`, filter: `blur(${(1 - a) * 14}px)`}
-      : {opacity: a};
+      : type === 'through' // the camera has flown into the screen: the next shot grows out of it, still moving forward
+        ? {opacity: range(t, 0, 0.7), transform: `scale(${0.86 + 0.14 * range(t, 0, 1, expoOut)})`, filter: `blur(${(1 - a) * 10}px)`}
+        : {opacity: a};
   const body = p.kind === '3d' ? <Shot3D p={p} off={-x} /> : <Freeze frame={0}><Shot2D p={p} /></Freeze>;
   return (
     <AbsoluteFill style={style}>

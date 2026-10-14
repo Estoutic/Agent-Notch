@@ -241,7 +241,8 @@ def area_light(name, loc, target, energy, color, size, size_y):
 # Each returns (scene, per-frame function lf -> None). lf runs from -HANDLE to len - 1.
 
 def shot_cascade(S):
-    """4 -> 8 -> 12 terminal windows standing over a dark desk; the camera pulls back through the wall of them."""
+    """4 -> 8 -> 12 terminal windows in one wall over a dark desk. Each beat adds a ring of windows and the camera
+    jumps back on the beat to take them in: 2x2, then 4x2, then 4x3, then a slow drift back."""
     sc, cam, hinge = scene("bar-one", studio=False, samples=S)
     keep = {"Floor", "Wall"}
     for ob in bpy.data.objects:
@@ -249,14 +250,15 @@ def shot_cascade(S):
             ob.hide_render = True
     ev = PLAN["shots"]["cascade"]["ev"]
     n = PLAN["shots"]["cascade"]["len"]
-    # (x, depth y, z, appears at): layer A in the back, B and C nearer, so the pull-back passes them
     h0 = -HANDLE - 4
-    slots = [(-0.13, 0.42, 0.105, h0), (0.13, 0.42, 0.105, h0), (-0.13, 0.42, 0.275, h0), (0.13, 0.42, 0.275, h0),
-             (-0.40, 0.24, 0.09, ev["cut2"]), (0.40, 0.24, 0.09, ev["cut2"]), (-0.40, 0.24, 0.26, ev["cut2"]), (0.40, 0.24, 0.26, ev["cut2"]),
-             (-0.66, 0.02, 0.12, ev["cut3"]), (0.66, 0.02, 0.12, ev["cut3"]), (0.0, 0.18, 0.44, ev["cut3"]), (-0.28, 0.0, 0.44, ev["cut3"])]
+    X0, X1, Z = 0.13, 0.39, (0.105, 0.28, 0.455)
+    # (x, depth jitter, z, appears at): the first four fill the frame, then the sides, then the row on top
+    slots = [(-X0, 0.00, Z[0], h0), (X0, 0.02, Z[0], h0), (-X0, 0.03, Z[1], h0), (X0, 0.00, Z[1], h0),
+             (-X1, -0.04, Z[0], ev["cut2"]), (X1, -0.02, Z[0], ev["cut2"]), (-X1, -0.01, Z[1], ev["cut2"]), (X1, -0.05, Z[1], ev["cut2"]),
+             (-X1, -0.03, Z[2], ev["cut3"]), (-X0, 0.01, Z[2], ev["cut3"]), (X0, -0.02, Z[2], ev["cut3"]), (X1, 0.02, Z[2], ev["cut3"])]
     wins = []
-    for i, (x, y, z, at) in enumerate(slots):
-        bpy.ops.mesh.primitive_plane_add(size=1, location=(x, y, z), rotation=(math.radians(90), 0, math.radians(-x * 22)))
+    for i, (x, dy, z, at) in enumerate(slots):
+        bpy.ops.mesh.primitive_plane_add(size=1, location=(x, 0.42 + dy, z), rotation=(math.radians(90), 0, math.radians(-x * 14)))
         ob = bpy.context.active_object
         ob.name = f"Term{i}"
         ob.scale = (0.24, 0.156, 1)
@@ -272,22 +274,32 @@ def shot_cascade(S):
         nt.links.new(tex.outputs["Color"], em.inputs["Color"])
         nt.links.new(em.outputs[0], out.inputs["Surface"])
         ob.data.materials.append(m)
-        wins.append((ob, em, at))
+        wins.append((ob, em, at, Vector((x, 0.42 + dy, z))))
     glare(0.8, 0.5)
 
+    def snap(lf, at, dur=10):
+        """0 before the beat, then a fast ease-out to 1: the camera move lands with the thud."""
+        u = min(1.0, max(0.0, (lf - at) / dur))
+        return 1 - (1 - u) ** 3
+
+    # framing per step: distance from the wall, height of the centre, lens
+    D = (0.72, 1.18, 1.42)
+    ZC = (0.20, 0.21, 0.29)
+
     def frame(lf):
-        for ob, em, at in wins:
-            k = 0.0 if lf < at else ss(at, at + 4, lf)
+        for ob, em, at, home in wins:
+            k = 0.0 if lf < at else ss(at, at + 3, lf)
             ob.hide_render = k <= 0.001
-            em.inputs["Strength"].default_value = 1.4 * k
-            ob.scale = (0.24 * (0.94 + 0.06 * k), 0.156 * (0.94 + 0.06 * k), 1)
-        t = (lf + HANDLE) / (n + HANDLE)
-        e = ease(t, 1.8) * 0.8 + t * 0.2
-        kick = bump(lf, ev["cut2"], 2, 10) + bump(lf, ev["cut3"], 2, 10)   # each new row of windows shoves the camera back
-        loc = Vector((0.045 * math.sin(2.2 * t) - 0.02, lerp(0.02, -0.55, e) - 0.03 * kick, lerp(0.19, 0.25, e)))
-        tgt = Vector((0.0, 0.40, lerp(0.19, 0.20, e)))
-        cam_set(cam, loc, tgt, lerp(32, 38, e), 5.6, Vector((0, 0.40, 0.19)), roll=lerp(-2.0, 1.5, e),
-                shk=shake(lf, [ev["cut2"], ev["cut3"]], 1.2, 1.0))
+            em.inputs["Strength"].default_value = 1.4 * k * (1 + 0.8 * (1 - ss(at + 2, at + 10, lf)))   # a short flare as it lands
+            ob.scale = (0.24 * (0.9 + 0.1 * k), 0.156 * (0.9 + 0.1 * k), 1)
+            ob.location = home + Vector((0, 0.06 * (1 - k), 0))
+        a, b = snap(lf, ev["cut2"]), snap(lf, ev["cut3"])
+        drift = ss(ev["cut3"] + 8, n, lf)
+        d = lerp(lerp(D[0], D[1], a), D[2], b) + 0.30 * drift + 0.04 * ss(-HANDLE, ev["cut2"], lf)
+        zc = lerp(lerp(ZC[0], ZC[1], a), ZC[2], b)
+        tgt = Vector((0.0, 0.42, zc))
+        loc = Vector((0.02 * math.sin(lf / 40), 0.42 - d, zc + 0.03 + 0.04 * drift))
+        cam_set(cam, loc, tgt, 35, 5.6, tgt, roll=lerp(-1.5, 1.0, drift))
     return sc, frame
 
 
@@ -578,7 +590,8 @@ def shot_risky(S):
 
 def shot_night(S):
     """Keep awake: the real lid closes, its light narrows to a line and goes out; a blue night, the window shadow
-    sweeps; morning sun; the lid opens on done. Dramatisation."""
+    sweeps; morning sun; the lid opens and the ghosts dive into the screen one by one, each landing as a "done"
+    toast; the camera then flies head-on into the screen, into the next shot. Dramatisation."""
     sc, cam, hinge = B.build(V.base_opts("awake", screen=0.6, key=0.0, fill=0.0))
     V.eevee(sc, S)
     V.desk(sc, color=(0.05, 0.04, 0.034), rough=0.38, wall_color=(0.05, 0.055, 0.07))
@@ -586,7 +599,7 @@ def shot_night(S):
         bpy.data.objects[nm].hide_render = True
     V.world(sc, (0.010, 0.018, 0.045), 1.0)
     wn = sc.world.node_tree.nodes["Background"]
-    scr = Screen(["awake", "awake-sub"])
+    scr = Screen(["awake"] + [f"morning-{k}" for k in range(6)])
     ev = PLAN["shots"]["night"]["ev"]
     n = PLAN["shots"]["night"]["len"]
     gap_y = -B.D / 2 * MM + 0.003
@@ -602,12 +615,21 @@ def shot_night(S):
     lamp = V.light("Lamp", 'AREA', (0.7, -0.2, 0.6), (0, 0, 0.05), 25.0, (1.0, 0.78, 0.55), size=0.5, size_y=0.5)
     sc.view_settings.exposure = 0.4
     hz0, hz1 = B.HINGE_Z * MM, (B.DECK + 0.9) * MM
-    ghosts = ghost_terms(ev)
+    # morning: each ghost dives into the screen; its toast appears as it lands
+    # where the open screen will be: the camera and the ghosts aim there while the lid is still rising
+    B.set_lid(hinge, 106)
+    hinge.location.z = hz0
+    bpy.context.view_layer.update()
+    nrm_f, ft_f, land = B.screen_normal(hinge).copy(), B.stage_point(hinge, 976, 470), B.stage_point(hinge, 976, 300) + B.screen_normal(hinge) * 0.004
+    # the ghosts nearest the camera go first, so the swing to the screen clears quickly
+    dive_at = [ev["open"] + 6 + 3 * j for j in (1, 2, 3, 4, 0)]
+    DIVE = 10
+    ghosts = ghost_terms(ev, dive_at, DIVE, lambda: land, nrm_f)
 
     def lid_at(lf):
         if lf < ev["open"]:
             return lerp(108, 0, ease(ss(-4, ev["shut"], lf), 2.4))   # shut all the way
-        return lerp(0, 34, ease(ss(ev["open"], n + 6, lf), 2.0))
+        return lerp(0, 106, ease(ss(ev["open"], ev["open"] + 14, lf), 2.0))
 
     def frame(lf):
         a = lid_at(lf)
@@ -615,7 +637,8 @@ def shot_night(S):
         B.set_lid(hinge, a)
         morning = ss(ev["dawn"] - 8, ev["dawn"] + 10, lf)
         night = ss(ev["shut"] - 6, ev["out"], lf)
-        scr.show("awake" if lf < ev["open"] else "awake-sub", 1.0 if lf < ev["open"] else lerp(0.3, 1.0, ss(ev["open"], n, lf)))
+        landed = sum(1 for t in dive_at if lf >= t + DIVE)
+        scr.show("awake" if lf < ev["open"] else f"morning-{landed}", 1.0 if lf < ev["open"] else lerp(0.4, 1.0, ss(ev["open"], ev["open"] + 10, lf)))
         # the light of the screen under the lid: a line that narrows and goes out, back when the lid opens
         gapk = 1 - ss(3, 12, a)
         out = 1 - ss(ev["shut"] + 2, ev["out"] + 6, lf)
@@ -646,12 +669,22 @@ def shot_night(S):
         tt = (lf + HANDLE) / (n + HANDLE)
         loc = Vector((lerp(0.06, 0.0, tt), lerp(-0.80, -0.70, tt) - 0.30 * up, lerp(0.24, 0.21, tt) + 0.10 * up))
         tgt = Vector((0.0, -0.04 + 0.06 * up, lerp(0.10, 0.03, ss(-4, ev["shut"], lf)) + 0.12 * up))
-        cam_set(cam, loc, tgt, 45, lerp(5.6, 8.0, up), Vector((0, -0.12 + 0.12 * up, 0.02 + 0.13 * up)))
+        foc = Vector((0, -0.12 + 0.12 * up, 0.02 + 0.13 * up))
+        # morning: swing round to face the screen, then fly into it (ease-in, faster and faster) onto the toasts
+        g = ease(ss(ev["open"] - 6, ev["open"] + 14, lf), 2.0)
+        if g > 0:
+            nrm, ft = nrm_f, ft_f
+            u = ss(ev["open"] + 22, n, lf)
+            d = lerp(0.50, 0.045, u ** 2.6)
+            fl = ft + nrm * d + Vector((0, 0, 0.03 * d))
+            loc, tgt, foc = loc.lerp(fl, g), tgt.lerp(ft, g), foc.lerp(ft, g)
+        cam_set(cam, loc, tgt, 45, lerp(lerp(5.6, 8.0, up), 11.0, g), foc)
     return sc, frame
 
 
-def ghost_terms(ev):
+def ghost_terms(ev, dive_at, dive, target, nrm=None):
     """Night: with the lid shut, translucent terminals float up out of the closed Mac and their logs keep running.
+    In the morning ghost i dives into the screen from dive_at[i] for `dive` frames (target() is the landing point).
     Dramatisation of Keep awake."""
     # (x, y, top z, tilt deg, rise delay, scroll speed)
     spots = [(-0.25, 0.05, 0.25, 9, 0, 1.0), (0.24, 0.07, 0.27, -8, 3, 1.3), (0.0, 0.14, 0.33, 0, 6, 0.8),
@@ -709,17 +742,25 @@ def ghost_terms(ev):
         out.append((parts, x, y, z, tilt, dl, sp))
 
     def frame(lf):
-        for parts, x, y, z, tilt, dl, sp in out:
+        goal = target()
+        for i, (parts, x, y, z, tilt, dl, sp) in enumerate(out):
             a0 = ev["out"] - 4 + dl
-            k = ss(a0, a0 + 12, lf) * (1 - ss(ev["dawn"] - 2 + dl * 0.3, ev["dawn"] + 10, lf))
+            dv = ss(dive_at[i], dive_at[i] + dive, lf)
+            p = dv ** 2.2   # accelerates into the screen
+            k = ss(a0, a0 + 12, lf) * (1 - ss(0.85, 1.0, dv))
             rise = ease(ss(a0, a0 + 22, lf), 2.2)
             zc = lerp(0.02, z - H / 2, rise) + 0.004 * math.sin(lf * 0.12 + x * 20)
             for ob, kind, h, mp, em, fac in parts:
                 ob.hide_render = k < 0.01
                 zz = zc + (H / 2 + h / 2 if kind == "bar" else 0.0)
-                ob.location = (x, y, zz)
-                ob.rotation_euler = (math.radians(90 - 6 * (1 - rise)), 0, math.radians(tilt))
-                s_ = lerp(0.6, 1.0, rise)
+                a_ = Vector((x, y, zz))
+                if nrm is None:
+                    ob.location = a_.lerp(goal, p)
+                else:   # arc over and in front of the screen, then straight in
+                    c_ = goal + nrm * 0.16 + Vector((x * 0.5, 0, 0.05))
+                    ob.location = a_ * (1 - p) ** 2 + c_ * (2 * (1 - p) * p) + goal * p * p
+                ob.rotation_euler = (math.radians(90 - 6 * (1 - rise)), 0, math.radians(tilt * (1 - p)))
+                s_ = lerp(0.6, 1.0, rise) * (1 - 0.9 * p)
                 ob.scale = (W * s_, h * s_, 1)
                 fac.inputs[1].default_value = 0.9 * k
                 em.inputs["Strength"].default_value = 2.2 * k

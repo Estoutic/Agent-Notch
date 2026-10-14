@@ -114,10 +114,11 @@ export const Anatomy7: React.FC = () => {
 };
 
 /* ---------- usage: limits, context, cost, each pinned to where it lives ---------- */
+/** Boxes in usage.png pixels (760x600), measured on the image: the Codex week line, the context rings, today's spend row. */
 const USAGE_SPOTS = {
-  limit: {x0: 14, y0: 76, x1: 742, y1: 230, big: '63%', line: 'of the weekly Codex limit · resets in 1 d'},
-  context: {x0: 590, y0: 396, x1: 748, y1: 508, big: 'Context', line: 'how full each agent is, as a ring'},
-  cost: {x0: 14, y0: 250, x1: 742, y1: 336, big: '$3.42', line: 'spent today on this project, estimated'},
+  limit: {x0: 24, y0: 140, x1: 736, y1: 230, big: '63%', line: 'of the weekly Codex limit · resets in 1 d'},
+  context: {x0: 606, y0: 388, x1: 744, y1: 520, big: 'Context', line: 'how full each agent is, as a ring'},
+  cost: {x0: 30, y0: 270, x1: 730, y1: 312, big: '$3.42', line: 'spent today on this project, estimated'},
 };
 export const Usage7: React.FC = () => {
   const {f, ev, len} = useShot('usage');
