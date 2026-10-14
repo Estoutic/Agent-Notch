@@ -40,14 +40,14 @@ const slot = (r: number, f: number, at = SORT_AT, snap = 9) => {
 
 export const youCell = () => ({x: X0 + COLS[4] * CH + CH * 1.5, y: Y0 + LINE / 2});
 
-export const TopList: React.FC<{f: number; done?: boolean; sortAt?: number; snap?: number}> = ({f, done, sortAt = SORT_AT, snap = 9}) => {
+export const TopList: React.FC<{f: number; done?: boolean; sortAt?: number; snap?: number; time?: string}> = ({f, done, sortAt = SORT_AT, snap = 9, time}) => {
   const SORT_AT = sortAt;
   const lit = done ? 0 : span(f, SORT_AT + Math.min(4, snap / 2), SORT_AT + Math.min(10, snap + 1));
   const header = done
     ? 'agents — 13 processes · 12 running · 0 blocked'
     : 'agents — 13 processes · 12 running · 1 blocked';
   const sortLabel = f >= SORT_AT || done ? 'sort: BLOCKED ▼' : 'sort: PID ▲';
-  const clock = `14:${String(32 + Math.floor((f + 20) / 1800)).padStart(2, '0')}:${String(7 + Math.floor(f / 30)).padStart(2, '0')}`;
+  const clock = time ?? `14:${String(32 + Math.floor((f + 20) / 1800)).padStart(2, '0')}:${String(7 + Math.floor(f / 30)).padStart(2, '0')}`;
   return (
     <div style={{position: 'absolute', inset: 0, fontFamily: T.mono, fontSize: FONT, color: P.text, whiteSpace: 'pre'}}>
       <div style={{position: 'absolute', left: X0, top: 62, width: TABLE_W, display: 'flex', justifyContent: 'space-between', color: P.dim}}>

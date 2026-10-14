@@ -3,7 +3,8 @@ import React from 'react';
 import {AbsoluteFill, random} from 'remotion';
 import {Mark} from '../lib';
 import {Snap} from '../v5/Beats';
-import {Dramatisation, P, Plate, T, clamp01, lerp, span} from '../v5/common';
+import {Dramatisation, P, Plate, Pointer, T, clack, clamp01, lerp, span} from '../v5/common';
+import {TopList} from '../v5/Top';
 import {THEMES} from '../v5/Orbit';
 import {BAR, Cap, Note, clockText, minutesAt, rise} from './kit';
 
@@ -145,3 +146,89 @@ export const Todo: React.FC<{f: number; n: number; name: string}> = ({n, name}) 
   </AbsoluteFill>
 );
 export {BAR};
+
+/* ---------- 2 (240-420): the list, said once and forgiven ---------- */
+export const Slowest: React.FC<{f: number}> = ({f}) => {
+  const lf = f - 240;
+  const k = 0.62;
+  const out = span(f, 396, 418, (t) => t * t);
+  const dot = span(f, 398, 420, (t) => t * t * t);
+  return (
+    <AbsoluteFill style={{overflow: 'hidden'}}>
+      <div style={{position: 'absolute', inset: 0, transformOrigin: '100% 0', transform: `translate(${150 + (1 - rise(f, 240)) * 60}px, 200px) scale(${k * lerp(1, 1.04, lf / 180)})`, opacity: Math.min(1, lf / 10) * (1 - out)}}>
+        <TopList f={lf} sortAt={22} snap={12} time={clockText(minutesAt(f)) + ':12'} />
+      </div>
+      <div style={{opacity: 1 - span(f, 352, 362)}}>
+        <Cap f={f} at={276} size={96} style={{left: 96, top: 300}}>{'The slowest process\non your Mac'}</Cap>
+        <Cap f={f} at={306} size={96} style={{left: 96, top: 500}}>is you</Cap>
+      </div>
+      {f >= 306 && f < 420 && (
+        // the amber period outlives the sentence and becomes the waiting mark of the reveal
+        <div style={{position: 'absolute', left: lerp(96 + 278, 960, dot), top: lerp(500 + 64, 540, dot), width: lerp(24, 60, dot), height: lerp(24, 60, dot), borderRadius: '50%', background: P.amber,
+          transform: 'translate(-50%, -50%)', opacity: Math.min(1, rise(f, 306) * 1.4), boxShadow: `0 0 ${lerp(0, 80, dot)}px rgba(255,176,31,0.6)`}} />
+      )}
+      <div style={{opacity: 1 - out}}>
+        <Cap f={f} at={362} size={104} style={{left: 96, top: 300}}>Not your fault.</Cap>
+        <Cap f={f} at={376} size={104} color={P.amber} style={{left: 96, top: 420}}>{"You're one person."}</Cap>
+      </div>
+      {f < 400 && <Dramatisation />}
+    </AbsoluteFill>
+  );
+};
+
+/* ---------- 3 (420-660): the reveal; the states as a quiet legend; the name on hit 1 (540) ---------- */
+const STATES: [string, string][] = [['working', P.green], ['waiting for you', P.amber], ['stuck', P.red], ['done', '#B8B8C0']];
+export const Reveal: React.FC<{f: number}> = ({f}) => {
+  const lf = f - 420;
+  const pf = 89 * (1 - Math.pow(1 - clamp01(lf / 200), 2));
+  return (
+    <AbsoluteFill style={{background: '#000', overflow: 'hidden'}}>
+      <div style={{position: 'absolute', inset: 0, opacity: Math.min(1, lf / 14), transform: `scale(${lerp(1.0, 1.06, lf / 240)})`}}>
+        <Plate shot="reveal" frame={pf} />
+      </div>
+      <AbsoluteFill style={{background: 'linear-gradient(0deg, rgba(0,0,0,0.85), rgba(0,0,0,0) 50%)'}} />
+      <div style={{position: 'absolute', left: 96, bottom: f >= 540 ? 320 : 110, display: 'flex', gap: 36, transition: 'none'}}>
+        {STATES.map(([w, c], i) => {
+          const p = rise(f, 450 + i * 18);
+          return f >= 450 + i * 18 ? (
+            <div key={w} style={{display: 'flex', alignItems: 'center', gap: 12, opacity: Math.min(1, p * 1.4), transform: `translateY(${(1 - p) * 20}px)`, fontFamily: T.body, fontSize: 30, fontWeight: 600, color: P.text}}>
+              <span style={{width: 16, height: 16, borderRadius: 8, background: c}} />{w}
+            </div>
+          ) : null;
+        })}
+      </div>
+      <AbsoluteFill style={{background: 'linear-gradient(20deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 45%)', opacity: span(f, 530, 550)}} />
+      <Cap f={f} at={540} size={160} style={{left: 90, bottom: 150}}>Agent Notch</Cap>
+      <Note f={f} at={556} style={{left: 98, bottom: 100, color: P.text}}>Every agent. Every project. Beside the notch.</Note>
+    </AbsoluteFill>
+  );
+};
+
+/* ---------- 4 (660-840): 10:14, the first request, Allow on the bar at 780 ---------- */
+export const FirstAsk: React.FC<{f: number}> = ({f}) => {
+  const k = 1.3, x = 900, y = 250, allow = 780;
+  const btn = {x: x + (502 - 400) * k, y: y + (404 - 76) * k};
+  const cp = span(f, 730, allow - 3, (t) => t * t * (3 - 2 * t));
+  const cur = {x: lerp(1500, btn.x + 6, cp), y: lerp(1000, btn.y + 10, cp) - Math.sin(cp * Math.PI) * 40};
+  const press = clack(f, allow);
+  const ok = f >= allow;
+  const drop = rise(f, 668);
+  return (
+    <AbsoluteFill style={{overflow: 'hidden'}}>
+      <div style={{position: 'absolute', left: x, top: y + (1 - drop) * -80, opacity: Math.min(1, drop * 1.5), transform: `scale(${lerp(1, 1.03, span(f, 660, 840, (t) => t))})`, transformOrigin: '30% 30%'}}>
+        <Snap dir="snap4" src="ask.png" x0={400} y0={76} x1={1160} y1={445} k={k} r={18} style={{position: 'relative'}}>
+          {ok && <div style={{position: 'absolute', left: 0, right: 0, top: (220 - 76) * k, height: (440 - 220) * k, background: P.green, mixBlendMode: 'color', opacity: 0.55 * (1 - span(f, allow + 30, allow + 60))}} />}
+        </Snap>
+      </div>
+      {f >= allow + 10 && (
+        <div style={{position: 'absolute', left: x + 8, top: y + 500, fontFamily: T.mono, fontSize: 30, lineHeight: 1.5, whiteSpace: 'pre', opacity: Math.min(1, rise(f, allow + 10) * 1.4)}}>
+          <div style={{color: P.dim}}>● Bash corepack pnpm --filter api exec vitest</div>
+          {f >= allow + 26 && <div style={{color: P.green}}>✓ 14 passed</div>}
+        </div>
+      )}
+      <Cap f={f} at={680} size={104} style={{left: 96, top: 300}}>An agent asks.</Cap>
+      <Cap f={f} at={allow + 6} size={104} color={P.green} style={{left: 96, top: 430}}>{'Answered in\ntwo seconds.'}</Cap>
+      {f >= 728 && f < allow + 16 && <Pointer x={cur.x} y={cur.y} press={press} size={56} />}
+    </AbsoluteFill>
+  );
+};
