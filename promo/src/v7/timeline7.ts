@@ -28,27 +28,27 @@ export const V7: Shot7[] = [
   {id: 'you', beats: 2, kind: '2d', in: CUT},
   {id: 'reveal', beats: 4, kind: '3d', in: {type: 'zoom', x: 3, note: 'the amber period of "You." is the mark in the notch; hard cut on the drop'}},
   {id: 'approve', beats: 5, kind: '3d', in: CUT}, // continuous camera: the plate starts where reveal lands
-  {id: 'title', beats: 3, kind: '2d', in: {type: 'dissolve', x: 6, note: 'the panel blurs into the title card'}},
+  {id: 'title', beats: 3, kind: '2d', in: {type: 'dissolve', x: 3, note: 'the panel blurs into the title card'}},
   {id: 'states', beats: 5, kind: '2d', in: CUT},
   {id: 'anatomy', beats: 7, kind: '2d', k: 7 / 6, in: CUT},
-  {id: 'swarm', beats: 6, kind: '3d', in: {type: 'dissolve', x: 6, note: 'counters in the notch -> the city of 55 agents'}},
-  {id: 'open', beats: 5, kind: '3d', in: {type: 'dissolve', x: 8, note: 'the fly-over rises to the whole panel'}},
-  {id: 'usage', beats: 5, kind: '2d', k: 1.25, in: {type: 'dissolve', x: 6, note: 'the panel row becomes the usage card'}},
+  {id: 'swarm', beats: 6, kind: '3d', in: {type: 'dissolve', x: 3, note: 'counters in the notch -> the city of 55 agents'}},
+  {id: 'open', beats: 5, kind: '3d', in: {type: 'dissolve', x: 4, note: 'the fly-over rises to the whole panel'}},
+  {id: 'usage', beats: 5, kind: '2d', k: 1.25, in: {type: 'dissolve', x: 3, note: 'the panel row becomes the usage card'}},
   {id: 'jump', beats: 4, kind: '2d', in: CUT},
   {id: 'keys', beats: 6, kind: '3d', in: CUT}, // jump ends in a whip; the music jumps back to groove 2 on this cut
-  {id: 'question', beats: 6, kind: '3d', in: {type: 'zoom', x: 6, note: 'the pressed key becomes the next panel button'}},
-  {id: 'plan', beats: 8, kind: '3d', in: {type: 'dissolve', x: 5, note: 'answered question -> the plan on the same panel'}},
+  {id: 'question', beats: 6, kind: '3d', in: {type: 'zoom', x: 4, note: 'the pressed key becomes the next panel button'}},
+  {id: 'plan', beats: 8, kind: '3d', in: {type: 'dissolve', x: 3, note: 'answered question -> the plan on the same panel'}},
   {id: 'risky', beats: 10, kind: '3d', in: CUT}, // cut on the breakdown: everything goes dark, the red row lights the desk
-  {id: 'card', beats: 11, kind: '2d', k: 11 / 9, in: {type: 'zoom', x: 6, note: 'the red row becomes the Deny chip, then the card'}},
+  {id: 'card', beats: 11, kind: '2d', k: 11 / 9, in: {type: 'zoom', x: 4, note: 'the red row becomes the Deny chip, then the card'}},
   {id: 'toast', beats: 4, kind: '2d', in: CUT},
-  {id: 'night', beats: 12, kind: '3d', in: {type: 'dissolve', x: 12, note: 'the toast becomes the closing lid'}},
-  {id: 'trust', beats: 5, kind: '2d', in: {type: 'light', x: 10, note: 'the lid light line becomes the morning'}},
+  {id: 'night', beats: 12, kind: '3d', in: {type: 'dissolve', x: 6, note: 'the toast becomes the closing lid'}},
+  {id: 'trust', beats: 5, kind: '2d', in: {type: 'light', x: 6, note: 'the lid light line becomes the morning'}},
   {id: 'sounds', beats: 4, kind: '2d', in: CUT},
   {id: 'themes', beats: 8, kind: '3d', in: CUT},
   {id: 'presets', beats: 3, kind: '2d', in: CUT},
   {id: 'hosts', beats: 3, kind: '2d', in: CUT},
   {id: 'local', beats: 3, kind: '2d', in: CUT},
-  {id: 'end', beats: 10, kind: '3d', in: {type: 'dissolve', x: 8, note: 'local logs -> the laptop on the desk'}},
+  {id: 'end', beats: 10, kind: '3d', in: {type: 'dissolve', x: 4, note: 'local logs -> the laptop on the desk'}},
 ];
 
 export type Placed7 = Shot7 & {startBeat: number; from: number; to: number; music: string};

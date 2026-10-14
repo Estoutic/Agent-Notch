@@ -102,10 +102,69 @@ def glare(threshold=None, strength=None):
     return g
 
 
-def cam_set(cam, loc, tgt, lens, fstop, focus, roll=0.0):
+def cam_set(cam, loc, tgt, lens, fstop, focus, roll=0.0, shk=None):
     V.camera(cam, loc, tgt, lens, fstop, focus)
     if roll:
         cam.rotation_euler.rotate_axis('Z', math.radians(roll))
+    if shk:   # (dx, dy, pitch, yaw): camera-local metres and degrees, from shake()
+        dx, dy, rx, ry = shk
+        cam.location += cam.rotation_euler.to_matrix() @ Vector((dx, dy, 0.0))
+        cam.rotation_euler.rotate_axis('X', math.radians(rx))
+        cam.rotation_euler.rotate_axis('Y', math.radians(ry))
+
+
+def ramp_e(lf, at, pre=12, post=24, slow=0.35):
+    """Offset t - lf of one speed ramp. Zero outside [at - pre, at + post] and exactly zero at `at`.
+    Speed 1 + e' dips to `slow` at the event, runs ahead of 1x before it and catches up after it."""
+    x = lf - at
+    u = x / (pre if x < 0 else post)
+    if abs(u) >= 1.0:
+        return 0.0
+    return -(1.0 - slow) * x * (1.0 - u * u) ** 2
+
+
+def ramp(lf, at, pre=12, post=24, slow=0.35):
+    """Shot time for output frame lf around a slow-motion event: t(at) == at, t == lf outside the window."""
+    return lf + ramp_e(lf, at, pre, post, slow)
+
+
+def remap(lf, ramps):
+    """Several ramps (windows must not overlap, so every event keeps t(ev) == ev)."""
+    return lf + sum(ramp_e(lf, *r) for r in ramps)
+
+
+# (event key, pre, post, slow) per shot; the event frame comes from PLAN so the ramp follows the timeline
+RAMP_SPEC = {"reveal": [("land", 14, 18, 0.5)],
+             "approve": [("click", 10, 22, 0.35), ("allow", 8, 14, 0.4)],
+             "open": [("click", 10, 22, 0.35)],
+             "keys": [("y", 10, 16, 0.35), ("n", 10, 18, 0.35)],
+             "question": [("pick", 10, 20, 0.35)],
+             "plan": [("approve", 10, 22, 0.35)],
+             "risky": [("deny", 10, 24, 0.3)]}
+
+
+def RAMPS(shot):
+    ev = PLAN["shots"][shot]["ev"]
+    return [(ev[k], pre, post, slow) for k, pre, post, slow in RAMP_SPEC.get(shot, [])]
+
+
+def shake(lf, hits, amp=1.0, rot=1.0, dur=10):
+    """Camera shake on hits: decays in a few frames. amp in mm, rot scales ~0.3 deg. Returns (dx, dy, pitch, yaw)."""
+    dx = dy = rx = ry = 0.0
+    for h in hits:
+        x = lf - h
+        if 0 <= x < dur:
+            d = math.exp(-x / 2.4) * (1 - ss(dur - 3, dur, x))
+            dx += d * math.sin(x * 2.5 + h * 1.7) * amp * MM
+            dy += d * math.cos(x * 3.1 + h * 2.3) * amp * MM
+            rx += d * math.sin(x * 2.2 + h) * 0.3 * rot
+            ry += d * math.cos(x * 2.7 + h * 0.6) * 0.3 * rot
+    return dx, dy, rx, ry
+
+
+def bump(lf, at, pre=3, post=12):
+    """0..1 bump peaking at `at` (a kick / push-in on a hit)."""
+    return ss(at - pre, at, lf) * (1 - ss(at, at + post, lf))
 
 
 def panel_cam(hinge, sx, sy, width_px, lens=50):
@@ -219,10 +278,12 @@ def shot_cascade(S):
             em.inputs["Strength"].default_value = 1.4 * k
             ob.scale = (0.24 * (0.94 + 0.06 * k), 0.156 * (0.94 + 0.06 * k), 1)
         t = (lf + HANDLE) / (n + HANDLE)
-        e = ease(t, 2.2) * 0.8 + t * 0.2
-        loc = Vector((0.0, lerp(0.02, -0.55, e), lerp(0.19, 0.25, e)))
+        e = ease(t, 1.8) * 0.8 + t * 0.2
+        kick = bump(lf, ev["cut2"], 2, 10) + bump(lf, ev["cut3"], 2, 10)   # each new row of windows shoves the camera back
+        loc = Vector((0.045 * math.sin(2.2 * t) - 0.02, lerp(0.02, -0.55, e) - 0.03 * kick, lerp(0.19, 0.25, e)))
         tgt = Vector((0.0, 0.40, lerp(0.19, 0.20, e)))
-        cam_set(cam, loc, tgt, lerp(32, 38, e), 5.6, Vector((0, 0.40, 0.19)), roll=lerp(-1.5, 1.5, e))
+        cam_set(cam, loc, tgt, lerp(32, 38, e), 5.6, Vector((0, 0.40, 0.19)), roll=lerp(-2.0, 1.5, e),
+                shk=shake(lf, [ev["cut2"], ev["cut3"]], 1.2, 1.0))
     return sc, frame
 
 
@@ -231,11 +292,14 @@ def shot_reveal(S):
     sc, cam, hinge = scene("bar-ask", screen=1.5, samples=S)
     scr = Screen(["bar-ask", "ask"])
     n = PLAN["shots"]["reveal"]["len"]
+    ev = PLAN["shots"]["reveal"]["ev"]
+    rp = RAMPS("reveal")
 
     def frame(lf):
         scr.show("bar-ask" if lf < 16 else "ask", 1.5)  # the panel drops open on the pull-back
-        loc, tgt, lens, fstop, focus = B.shot_reveal(max(0, lf), n, hinge)
-        cam_set(cam, loc, tgt, lens, fstop, focus)
+        tt = remap(lf, rp)   # pull-back runs ahead, then settles into the hero pose on the drop
+        loc, tgt, lens, fstop, focus = B.shot_reveal(max(0, tt), n, hinge)
+        cam_set(cam, loc, tgt, lens, fstop, focus, shk=shake(lf, [ev["pull"], ev["land"]], 1.0, 1.0))
     return sc, frame
 
 
@@ -257,15 +321,19 @@ def shot_approve(S):
     end_tgt = B.stage_point(hinge, 760, 330)
     end_loc = end_tgt + nrm * panel_cam(hinge, 760, 330, 1250) + SIDE * 0.05 + Vector((0, 0, -0.03))
 
+    rp = RAMPS("approve")
+
     def frame(lf):
         face = "bar-ask" if lf < ev["open"] else "ask" if lf < ev["allow"] + 2 else "sub"
         scr.show(face)
-        d = ease(ss(ev["click"] - 4, ev["click"] + 20, lf), 3.0)
-        drift = ss(ev["click"] + 20, n, lf)
-        loc = h_loc.lerp(end_loc, d) + nrm * (-0.012 * drift)
-        loc += Vector((math.sin(math.pi * d) * 0.05, 0, math.sin(math.pi * d) * 0.02))
+        tt = remap(lf, rp)
+        d = ease(ss(ev["click"] - 5, ev["click"] + 16, tt), 2.6)
+        drift = ss(ev["click"] + 16, n, tt)
+        loc = h_loc.lerp(end_loc, d) + nrm * (-0.02 * drift - 0.012 * bump(tt, ev["allow"], 4, 12))
+        loc += Vector((math.sin(math.pi * d) * 0.07, 0, math.sin(math.pi * d) * 0.03)) + SIDE * (-0.02 * drift)
         tgt = h_tgt.lerp(end_tgt, min(1.0, d * 1.05))
-        cam_set(cam, loc, tgt, 50, lerp(11.0, 4.0, d), h_focus.lerp(end_tgt, d))
+        cam_set(cam, loc, tgt, 50, lerp(11.0, 4.0, d), h_focus.lerp(end_tgt, d),
+                shk=shake(lf, [ev["click"], ev["allow"]], 0.9, 1.0))
     return sc, frame
 
 
@@ -284,14 +352,15 @@ def shot_swarm(S):
     def frame(lf):
         scr.show("swarm")
         t = (lf + HANDLE) / (ev["rise"] + HANDLE)
-        bx, by = lerp(1100, 820, t), lerp(1440, 980, t)
+        bx, by = lerp(1180, 780, t) + 40 * math.sin(t * 5.0), lerp(1460, 960, t)   # faster track along the projects, with a weave
         low = B.stage_point(hinge, bx, by) + nrm * 0.026 - up * 0.020
         low_t = B.stage_point(hinge, bx - 420, by - 640)
-        r = ease(ss(ev["rise"] - 6, n + 4, lf), 2.6)
+        r = ease(ss(ev["rise"] - 8, n, lf), 2.4)
         high = B.stage_point(hinge, 760, 820) + nrm * 0.20 + SIDE * 0.03 - up * 0.05
         high_t = B.stage_point(hinge, 760, 760)
         cam_set(cam, low.lerp(high, r), low_t.lerp(high_t, r), lerp(24, 35, r), lerp(11.0, 8.0, r),
-                B.stage_point(hinge, bx - 260, by - 380).lerp(high_t, r), roll=lerp(lerp(7, 3, t), 0, r))
+                B.stage_point(hinge, bx - 260, by - 380).lerp(high_t, r), roll=lerp(lerp(9, 3, t), 0, r),
+                shk=shake(lf, [ev["flip"]], 0.8, 1.0))
     return sc, frame
 
 
@@ -308,12 +377,17 @@ def shot_open(S):
     b_t = B.stage_point(hinge, 1060, 520)
     b_l = b_t + nrm * panel_cam(hinge, 0, 0, 1500) - SIDE * 0.07 + Vector((0, 0, 0.03))
 
+    rp = RAMPS("open")
+
     def frame(lf):
         scr.show("bar-projects" if lf < ev["click"] + 1 else "projects")
-        e = ease(ss(ev["pan"] - 4, ev["pan"] + 26, lf), 3.0)
+        tt = remap(lf, rp)
+        e = ease(ss(ev["pan"] - 4, ev["pan"] + 20, tt), 2.6)
         creep = (lf + HANDLE) / (n + HANDLE)
-        loc = a_l.lerp(b_l, e) + nrm * (-0.01 * creep)
-        cam_set(cam, loc, a_t.lerp(b_t, e), 50, 5.6, B.stage_point(hinge, 760, lerp(150, 480, e)))
+        push = 1 - ease(ss(-HANDLE, ev["click"], tt), 2.0)   # pushes in on the notch, the click lands at the end of it
+        loc = a_l.lerp(b_l, e) + nrm * (-0.01 * creep + 0.035 * push)
+        cam_set(cam, loc, a_t.lerp(b_t, e), 50, 5.6, B.stage_point(hinge, 760, lerp(150, 480, e)),
+                shk=shake(lf, [ev["click"]], 0.8, 1.0))
     return sc, frame
 
 
@@ -375,20 +449,24 @@ def shot_keys(S):
     fpb = PLAN["shots"]["keys"]["fpb"]
     pos = {nm: Vector((rects[i][0] * MM, rects[i][1] * MM, (B.DECK + 0.75) * MM)) for nm, i in KEY_IDX.items()}
     c = (pos["ctrl"] + pos["opt"] + pos["y"] + pos["n"]) / 4
+    rp = RAMPS("keys")
 
     def frame(lf):
         scr.show("ask" if lf < ev["y"] + 6 else "sub")
-        travel = {"ctrl": max(press(lf, ev["y"] - 0.2 * fpb), press(lf, ev["n"] - 0.2 * fpb)),
-                  "opt": max(press(lf, ev["y"] - 0.1 * fpb), press(lf, ev["n"] - 0.1 * fpb)),
-                  "y": press(lf, ev["y"]), "n": press(lf, ev["n"])}
+        tt = remap(lf, rp)   # keys travel in shot time: slow through each press, same frame for the hit
+        travel = {"ctrl": max(press(tt, ev["y"] - 0.2 * fpb), press(tt, ev["n"] - 0.2 * fpb)),
+                  "opt": max(press(tt, ev["y"] - 0.1 * fpb), press(tt, ev["n"] - 0.1 * fpb)),
+                  "y": press(tt, ev["y"]), "n": press(tt, ev["n"])}
         for nm, ob in keys.items():
             ob.location.z = -0.6 * MM * travel[nm]  # keys stand 0.75 mm proud of the deck
             bpy.data.materials[ob["ink"]].node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.08 + 4.0 * travel[nm]
-        t = ease((lf + HANDLE) / (n + HANDLE), 2.0)
+        t = ease((tt + HANDLE) / (n + HANDLE), 1.8)
         mods = (pos["ctrl"] + pos["opt"]) / 2
         aim = mods.lerp((pos["y"] + pos["n"]) / 2, 0.56)
-        loc = aim + Vector((lerp(-0.026, -0.022, t), lerp(-0.120, -0.105, t), lerp(0.140, 0.122, t)))
-        cam_set(cam, loc, aim, 45, 11.0, aim, roll=0)
+        aim += (pos["n"] - pos["y"]) * 0.12 * ease(ss(ev["y"] + 8, ev["n"] - 6, tt), 2.0)   # tracks from Y over to N
+        hit = bump(tt, ev["y"], 3, 12) + bump(tt, ev["n"], 3, 12)
+        loc = aim + Vector((lerp(-0.030, -0.020, t), lerp(-0.130, -0.108, t), lerp(0.150, 0.128, t))) * (1 - 0.06 * hit)
+        cam_set(cam, loc, aim, 45, 11.0, aim, roll=0, shk=shake(lf, [ev["y"], ev["n"]], 0.7, 1.0))
     return sc, frame
 
 
@@ -407,20 +485,23 @@ def shot_question(S):
     b_l = req + nrm * 0.27 + SIDE * 0.11 + Vector((0, 0, -0.10))
 
     pick = tint_card(hinge, 783, 339, 66, 6.6, color=(1.0, 0.62, 0.08), name="Pick")
+    rp = RAMPS("question")
 
     def frame(lf):
         scr.show("question" if lf < ev["pick"] + 10 else "sub")
         on = ss(ev["pick"] - 2, ev["pick"], lf) * (1 - ss(ev["pick"] + 8, ev["pick"] + 10, lf))
         pick.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.5 * on
-        e = ease(ss(-HANDLE, 34, lf), 3.0)
-        creep = ss(34, n, lf)
+        tt = remap(lf, rp)
+        e = ease(ss(-HANDLE, 30, tt), 2.6)
+        creep = ss(30, n, tt)
         loc = a_l.lerp(b_l, e) + (req - b_l) * 0.12 * creep
         tgt = opt.lerp(req.lerp(notch, 0.10), e)
         # once answered the panel shrinks to the bar: follow it up to the notch so the shot never ends on a tiny card
-        c2 = ease(ss(ev["pick"] + 10, ev["pick"] + 40, lf), 2.0)
+        c2 = ease(ss(ev["pick"] + 8, ev["pick"] + 34, tt), 2.0)
         loc = loc.lerp(B.stage_point(hinge, 900, 120) + nrm * 0.15 + SIDE * 0.05 + Vector((0, 0, -0.035)), c2)
         tgt = tgt.lerp(B.stage_point(hinge, 900, 110), c2)
-        cam_set(cam, loc, tgt, 50, lerp(4.0, 5.6, e), opt.lerp(B.stage_point(hinge, 700, 360), e))
+        cam_set(cam, loc, tgt, 50, lerp(4.0, 5.6, e), opt.lerp(B.stage_point(hinge, 700, 360), e),
+                shk=shake(lf, [ev["pick"]], 0.9, 1.0))
     return sc, frame
 
 
@@ -434,13 +515,17 @@ def shot_plan(S):
     nrm = B.screen_normal(hinge)
     req = B.stage_point(hinge, 720, 330)
     notch = B.stage_point(hinge, 976, 20)
+    rp = RAMPS("plan")
 
     def frame(lf):
         scr.show("plan" if lf < ev["approve"] + 3 else "sub")
-        t = ease((lf + HANDLE) / (n + HANDLE), 2.0)
-        loc = req + nrm * lerp(0.19, 0.16, t) - SIDE * lerp(0.08, 0.0, t) + Vector((0, 0, -0.06))
-        tgt = req.lerp(notch, 0.18) + SIDE * lerp(-0.01, 0.02, t)
-        cam_set(cam, loc, tgt, 50, 5.6, B.stage_point(hinge, lerp(560, 760, t), 330))
+        tt = remap(lf, rp)
+        t = ease((tt + HANDLE) / (n + HANDLE), 1.8)
+        go = ease(ss(ev["approve"] - 26, ev["approve"], tt), 2.0)   # leans in on Approve
+        loc = req + nrm * (lerp(0.215, 0.17, t) - 0.012 * go) - SIDE * lerp(0.11, 0.0, t) + Vector((0, 0, -0.06))
+        tgt = req.lerp(notch, 0.18) + SIDE * lerp(-0.02, 0.005, t)
+        cam_set(cam, loc, tgt, 50, 5.6, B.stage_point(hinge, lerp(520, 740, t), 330),
+                shk=shake(lf, [ev["approve"]], 0.9, 1.0))
     return sc, frame
 
 
@@ -468,6 +553,7 @@ def shot_risky(S):
     dpt = B.stage_point(hinge, 601, 533)
     deny = tint_card(hinge, 601, 533, 10, 4.0, color=(1.0, 0.85, 0.8), name="DenyHot")
     loc_d = dpt + nrm * 0.16 + SIDE * 0.05 + Vector((0, 0, -0.05))
+    rp = RAMPS("risky")
 
     def frame(lf):
         on = ss(-HANDLE, 6, lf) * (1 - ss(ev["deny"] + 2, ev["deny"] + 14, lf))
@@ -479,12 +565,15 @@ def shot_risky(S):
         red_low.data.energy = 55.0 * on * pulse
         scr.show("ask" if lf < ev["deny"] + 2 else "sub", 1.0 - 0.25 * on)
         tint.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.22 * row_on * pulse
-        push = ease(ss(-HANDLE, ev["tryKey"] + 10, lf), 2.0)
-        m = ease(ss(ev["move"] - 6, ev["move"] + 24, lf), 3.0)
-        wide = ease(ss(ev["deny"] + 4, ev["deny"] + 34, lf), 3.0)
+        tt = remap(lf, rp)
+        push = ease(ss(-HANDLE, ev["tryKey"] + 8, tt), 1.8)
+        m = ease(ss(ev["move"] - 6, ev["move"] + 18, tt), 2.6)
+        wide = ease(ss(ev["deny"] + 4, ev["deny"] + 28, tt), 2.6)
         loc = (focus + (base_l - focus) * lerp(1.0, 0.85, push)).lerp(loc_d, m).lerp(wide_l, wide)
         tgt = base_t.lerp(dpt, m).lerp(wide_t, wide)
-        cam_set(cam, loc, tgt, lerp(50, 40, wide), lerp(5.6, 8.0, wide), focus.lerp(dpt, m).lerp(wide_t, wide))
+        loc += (focus - loc) * (0.05 * bump(lf, ev["tryKey"], 2, 10))
+        cam_set(cam, loc, tgt, lerp(50, 40, wide), lerp(5.6, 8.0, wide), focus.lerp(dpt, m).lerp(wide_t, wide),
+                shk=shake(lf, [ev["tryKey"], ev["deny"]], 0.9, 1.0))
     return sc, frame
 
 
@@ -666,7 +755,10 @@ def shot_themes(S):
         k = ss(ev["starts"][i], ev["starts"][i] + 3, lf) if i else 1.0
         spill.data.color = Vector(prev).lerp(Vector(THEME_LIGHT[tid]), k)
         spill.data.energy = 0.6
-        loc, tgt, lens, fstop, focus = B.shot_themes(max(0, lf + HANDLE), n + HANDLE, hinge)
+        u = (lf + HANDLE) / (n + HANDLE)
+        f = (u + 0.07 * math.sin(2 * math.pi * u)) * (n + HANDLE)   # the arc surges and eases, same end pose
+        loc, tgt, lens, fstop, focus = B.shot_themes(max(0, f), n + HANDLE, hinge)
+        loc = tgt + (loc - tgt) * (1 - 0.10 * math.sin(math.pi * u) ** 2)   # one dolly-in through the middle
         cam_set(cam, loc, tgt, lens, fstop, focus)
     return sc, frame
 
@@ -682,12 +774,14 @@ def shot_end(S):
     def frame(lf):
         scr.show("one")
         t = (lf + HANDLE) / (n + HANDLE)
-        e = B.ease_sine(t)
+        e = B.ease_sine(t) * 0.6 + (1 - (1 - t) ** 1.7) * 0.4   # quicker first half of the orbit, still settles
         B.set_lid(hinge, lerp(110, 104, e))
         tgt = Vector((0, 0.03, 0.21))
-        loc = B.orbit(tgt, lerp(22, -10, e), 7, lerp(1.48, 1.38, e))
+        hit = bump(lf, PLAN["shots"]["end"]["ev"]["hit"], 3, 14)
+        loc = B.orbit(tgt, lerp(28, -10, e), 7, lerp(1.52, 1.38, e) - 0.05 * hit)   # push-in kick on the hit
         loc.z = lerp(0.36, 0.34, t)
-        cam_set(cam, loc, tgt, 50, 11, Vector((0, 0.03, 0.08)))
+        cam_set(cam, loc, tgt, 50, 11, Vector((0, 0.03, 0.08)),
+                shk=shake(lf, [PLAN["shots"]["end"]["ev"]["hit"]], 1.0, 1.0))
     return sc, frame
 
 
@@ -703,6 +797,10 @@ def main():
     for name in names:
         S = int(o["samples"])
         sc, frame = SHOTS[name](S)
+        for r in RAMPS(name):
+            ts = [remap(r[0], RAMPS(name))]
+            print(f"RAMP {name}: t(ev {r[0]}) = {ts[0]:.6f} == ev: {abs(ts[0] - r[0]) < 1e-9}; "
+                  f"min speed {min(remap(x / 10 + 0.1, RAMPS(name)) - remap(x / 10, RAMPS(name)) for x in range(-120, 1500)) * 10:.2f}", flush=True)
         sc.render.resolution_x, sc.render.resolution_y = 1920, 1080
         sc.render.resolution_percentage = int(o["scale"])
         sc.render.image_settings.color_mode = 'RGB'

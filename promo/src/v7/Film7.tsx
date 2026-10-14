@@ -10,20 +10,20 @@ import {BODY, CODE, DISPLAY, loadFonts} from '../fonts';
 import {C, Combo, Grain, ShotCtx, Vignette, expoOut, range} from '../lib';
 import type {Placed} from '../timeline';
 import {THEME_BEATS, THEME_ORDER} from '../timeline';
-import {Freeze as FreezeShot, TitleCard, You} from '../scenes/Open';
-import {Anatomy, Jump, States, Usage} from '../scenes/Aware';
-import {Trust} from '../scenes/Answer';
-import {CardShot, ToastShot} from '../scenes/Finish';
-import {Presets, Sounds, THEME_NAMES} from '../scenes/Custom';
-import {Hosts, INSTALL, Local} from '../scenes/Close';
+import {Freeze as FreezeShot, You} from '../scenes/Open';
+import {THEME_NAMES} from '../scenes/Custom';
+import {INSTALL, Local} from '../scenes/Close';
+// states and anatomy keep v4's drawn marks: the real snapshots carry the vendor glyphs, too big to show at that scale
+import {Anatomy, States} from '../scenes/Aware';
+import {CardShot7, Hosts7, Jump7, Presets7, Sounds7, TitleCard7, ToastShot7, Trust7, Usage7} from './scenes7';
 import {Caption} from '../scenes/common';
-import {EV7, HANDLE, LEN7, local7, place7, type Placed7, type Shot7Id} from './timeline7';
+import {EV7, HANDLE, LEN7, beatFrame, local7, place7, type Placed7, type Shot7Id} from './timeline7';
 
 loadFonts();
 
 const TWO_D: Partial<Record<Shot7Id, React.FC>> = {
-  freeze: FreezeShot, you: You, title: TitleCard, states: States, anatomy: Anatomy, usage: Usage, jump: Jump,
-  card: CardShot, toast: ToastShot, trust: Trust, sounds: Sounds, presets: Presets, hosts: Hosts, local: Local,
+  freeze: FreezeShot, you: You, title: TitleCard7, states: States, anatomy: Anatomy, usage: Usage7, jump: Jump7,
+  card: CardShot7, toast: ToastShot7, trust: Trust7, sounds: Sounds7, presets: Presets7, hosts: Hosts7, local: Local,
 };
 
 /* ---------- 3D shots: plate + type ---------- */
@@ -245,9 +245,36 @@ const hasFile = (name: string) => {
   }
 };
 
+/*
+ * Dynamics over the whole cut: a snap-in on every hard cut (scale 1.06 -> 1 in 6 frames, a short white flash on the
+ * cuts that land on a bar line), and a small punch on each bar downbeat inside the 2D shots.
+ */
+const PLACED = place7();
+const CUT_AT = PLACED.filter((p, i) => i > 0 && (!p.in || p.in.type === 'cut')).map((p) => ({f: p.from, bar: p.startBeat % 4 === 0}));
+const BARS = Array.from({length: 40}, (_, i) => beatFrame(i * 4)).filter((f) => f > 0 && f < LEN7);
+const kick = (f: number, at: number, dur: number) => (f >= at && f < at + dur ? Math.exp(-(f - at) / (dur / 3)) : 0);
+const Punch: React.FC<{children: React.ReactNode}> = ({children}) => {
+  const f = useCurrentFrame();
+  const shot = PLACED.find((p) => f >= p.from && f < p.to);
+  let s = 1;
+  let flash = 0;
+  for (const c of CUT_AT) {
+    s += 0.06 * kick(f, c.f, 8);
+    if (c.bar) flash = Math.max(flash, 0.22 * kick(f, c.f, 5));
+  }
+  if (shot?.kind === '2d') for (const b of BARS) if (!CUT_AT.some((c) => c.f === b)) s += 0.025 * kick(f, b, 9);
+  return (
+    <AbsoluteFill>
+      <AbsoluteFill style={{transform: `scale(${s})`}}>{children}</AbsoluteFill>
+      {flash > 0.005 && <AbsoluteFill style={{background: '#fff', opacity: flash, mixBlendMode: 'screen'}} />}
+    </AbsoluteFill>
+  );
+};
+
 export {LEN7};
 export const Film7: React.FC = () => (
   <AbsoluteFill style={{background: C.bg}}>
+    <Punch>
     {place7().map((p) => {
       const x = p.in && p.in.type !== 'cut' ? p.in.x : 0;
       return (
@@ -263,6 +290,7 @@ export const Film7: React.FC = () => (
         </React.Fragment>
       );
     })}
+    </Punch>
     {hasFile('audio/v7.wav') && <Audio src={staticFile('audio/v7.wav')} />}
   </AbsoluteFill>
 );
