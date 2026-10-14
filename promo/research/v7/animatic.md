@@ -102,3 +102,47 @@ is now brighter. The end card text was moved back up 30 px after its last line t
 - Left for the final render: true match cuts, the install line typed on the end screen in 3D, one continuous camera
   from the reveal into approve, and full-size plates.
 - The drop starts about 1 frame after the cut (AAC priming included). Not audible to me; can be nudged in the final mix.
+
+## Owner notes, round 2 (2026-10-14)
+
+The owner asked for the current app UI, more dynamics, and the lid shut all the way with the work visibly going on.
+Decide round 1-e002e2 settled the details: night about 6 s, the drawn UI in the 2D scenes replaced, and all four
+dynamics options.
+
+- Night: 12 beats (was 8). The lid now closes to 0°, and five translucent terminals rise out of the closed Mac, their
+  logs scrolling (`ghost_terms` in `v7_plates.py`, textures from `make_v7_faces.py --ghosts`). They fade at dawn. The
+  lid-light line under the front edge now fades to a trace, since the ghosts carry the night.
+- Time for the night came from question and plan (2 beats shorter each). The music edit after the keys cut moved by
+  one bar (offset 18) so the second breakdown still lands on the cut to risky.
+- 2D scenes: title, usage, jump, card, toast, trust, sounds, presets and hosts now use the app's own snapshots
+  (`public/snap5/`, `src/v7/scenes7/`). States and anatomy keep v4's drawn marks.
+- Snapshots from a fresh build of master match snap4 almost pixel for pixel, so the 3D faces stay on snap4. New
+  fixture scenes `ask-codex` and `ask-claude` show the panel after a single click. Allow on Claude's request leaves
+  the Codex `rm -rf` waiting, and Deny on that one leaves Claude's. Those fixture edits live only in a throwaway build;
+  the app repo is untouched.
+- Dynamics:
+  - Every 3D shot: push-ins and tracking moves.
+  - Hits: a short decaying shake.
+  - Clicks: speed ramps that slow to 0.3–0.5× and catch up afterwards; every click still lands on its frame.
+  - Edit: dissolves are 3–6 frames.
+  - Hard cuts: a snap-in.
+  - Bar-line cuts: a 5-frame flash, except on the hook's dead stops.
+  - 2D shots: a 2.5 % punch on each bar downbeat.
+
+Review round 3 (one fresh Opus reviewer) found two P1 problems:
+- The night-to-trust cut popped from white to black.
+- One Allow appeared to clear both requests, including the dangerous one.
+
+Both are fixed, along with the P2s:
+- the flash on "You.";
+- lid sounds 6–8 frames off the picture;
+- dead holds in risky;
+- captions over the panel in plan and risky;
+- a ghost terminal running into the night caption;
+- the reveal → approve panel jump.
+
+Open P3 items:
+- Card captions cross the laptop bezel by about 40 px.
+- The sounds click ring appears 3 frames late.
+- Title and usage dissolves dip through black.
+- The hosts desktop text is too small to read.

@@ -124,9 +124,9 @@ const CUES7: Partial<Record<Shot7Id, Cue7[]>> = {
   plan: [{b: 1.5, s: 'type', d: 1.5, v: 0.35}, {b: EV7.plan.approve, s: 'click'}, {b: EV7.plan.approve + 0.05, s: 'approve'}],
   risky: [{b: 0, s: 'sub', v: 0.9}, {b: 0, s: 'buzz', v: 0.7}, ...keyCombo(EV7.risky.tryKey, false).slice(0, 3), {b: EV7.risky.deny, s: 'click'}, {b: EV7.risky.deny + 0.05, s: 'deny'}],
   night: [ // no whoosh: the night opens inside the pre-night silence (98.5-101)
-    {b: EV7.night.shut, s: 'lid'}, {b: EV7.night.shut + 0.05, s: 'latch', v: 0.8},
+    {b: EV7.night.shut - 0.35, s: 'lid'}, {b: EV7.night.shut - 0.3, s: 'latch', v: 0.8}, // on the picture: the lid lands ahead of its event
     {b: EV7.night.out, s: 'roomNight', d: EV7.night.dawn - EV7.night.out, v: 1}, {b: EV7.night.dawn, s: 'birds', d: 2.5, v: 0.6},
-    {b: EV7.night.open, s: 'lid', v: 0.6, p: 1.2}, {b: EV7.night.open + 0.6, s: 'chime', p: 1.5, v: 0.5},
+    {b: EV7.night.open + 0.5, s: 'lid', v: 0.6, p: 1.2}, {b: EV7.night.open + 0.9, s: 'chime', p: 1.5, v: 0.5},
   ],
   themes: [{b: 0, s: 'whoosh', d: 0.8, v: 0.45}, ...THEME_BEATS.map((b, i) => ({b, s: 'tick' as Sfx7, v: 0.45, p: 0.9 + i * 0.03}))],
   end: [{b: 0, s: 'whoosh', d: 0.5, v: 0.5}, {b: EV7.end.hit, s: 'sub'}, {b: EV7.end.install, s: 'type', d: 1, v: 0.45}],

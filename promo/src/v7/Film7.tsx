@@ -116,8 +116,8 @@ const Plan: React.FC = () => {
   return (
     <>
       {shade('right', 0.65)}
-      <Cap f={f} from={4} to={ev.approve} V={false} ly={760} lx={1300} sub={<>Approve it, or send it<br />back with a note.</>}>Plans come to you.</Cap>
-      <Cap f={f} from={ev.approve + 2} to={len + 1} V={false} ly={760} lx={1300} color={C.green}>Approved.<br />Back to work.</Cap>
+      <Cap f={f} from={4} to={ev.approve} V={false} ly={840} lx={1380} sub={<>Approve it, or send it<br />back with a note.</>}>Plans come to you.</Cap>
+      <Cap f={f} from={ev.approve + 2} to={len + 1} V={false} ly={840} lx={1380} color={C.green}>Approved.<br />Back to work.</Cap>
     </>
   );
 };
@@ -131,7 +131,7 @@ const Risky: React.FC = () => {
       <Cap f={f} from={4} to={ev.move + 2} V={false} ly={700} lx={1350} color="#ff6b61" sub={<>rm -rf, sudo,<br />git push --force, curl | sh</>}>Risky commands<br />turn red.</Cap>
       <Cap f={f} from={ev.move + 4} to={ev.deny + 2} V={false} ly={760} sub="No hotkey can allow them.">They take<br />a click.</Cap>
       <Cap f={f} from={ev.deny + 4} to={len + 1} V={false} ly={760} sub={<>The agent is told no<br />and moves on.</>}>Denied.</Cap>
-      <ComboAt at={ev.tryKey} keys={['⌃', '⌥', 'Y']} tone={C.red} x={1350} y={480} />
+      <ComboAt at={ev.tryKey} keys={['⌃', '⌥', 'Y']} tone={C.red} x={1410} y={480} />
     </>
   );
 };
@@ -232,9 +232,15 @@ const TransIn: React.FC<{p: Placed7; x: number; type: string}> = ({p, x, type}) 
   return (
     <AbsoluteFill style={style}>
       {body}
-      {type === 'light' && <AbsoluteFill style={{background: '#fff4e0', opacity: 0.7 * Math.sin(Math.PI * a)}} />}
+      {type === 'light' && <AbsoluteFill style={{background: '#fff4e0', opacity: 0.75 * range(t, 0, 1, (u) => u * u)}} />}
     </AbsoluteFill>
   );
+};
+
+/** The light wash peaks on the cut and fades off over the first frames of the incoming shot. */
+const WashOut: React.FC = () => {
+  const f = useCurrentFrame();
+  return <AbsoluteFill style={{background: '#fff4e0', opacity: 0.75 * (1 - range(f, 0, 14))}} />;
 };
 
 const hasFile = (name: string) => {
@@ -250,7 +256,8 @@ const hasFile = (name: string) => {
  * cuts that land on a bar line), and a small punch on each bar downbeat inside the 2D shots.
  */
 const PLACED = place7();
-const CUT_AT = PLACED.filter((p, i) => i > 0 && (!p.in || p.in.type === 'cut')).map((p) => ({f: p.from, bar: p.startBeat % 4 === 0}));
+const QUIET = new Set(['freeze', 'you']); // the hook's dead stops stay still
+const CUT_AT = PLACED.filter((p, i) => i > 0 && (!p.in || p.in.type === 'cut') && !QUIET.has(p.id)).map((p) => ({f: p.from, bar: p.startBeat % 4 === 0}));
 const BARS = Array.from({length: 40}, (_, i) => beatFrame(i * 4)).filter((f) => f > 0 && f < LEN7);
 const kick = (f: number, at: number, dur: number) => (f >= at && f < at + dur ? Math.exp(-(f - at) / (dur / 3)) : 0);
 const Punch: React.FC<{children: React.ReactNode}> = ({children}) => {
@@ -285,6 +292,11 @@ export const Film7: React.FC = () => (
           {x > 0 && (
             <Sequence from={p.from - x} durationInFrames={x} name={`${p.id} in`}>
               <TransIn p={p} x={x} type={p.in!.type} />
+            </Sequence>
+          )}
+          {p.in?.type === 'light' && (
+            <Sequence from={p.from} durationInFrames={14} name={`${p.id} wash`}>
+              <WashOut />
             </Sequence>
           )}
         </React.Fragment>

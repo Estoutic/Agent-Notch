@@ -311,8 +311,8 @@ def hero(hinge):
 
 def shot_approve(S):
     """From the hero pose the camera dives into the notch as it opens; Allow; the agent goes back to work."""
-    sc, cam, hinge = scene("bar-ask", samples=S)
-    scr = Screen(["bar-ask", "ask", "sub"])
+    sc, cam, hinge = scene("ask", samples=S)
+    scr = Screen(["ask", "ask-codex"])
     ev = PLAN["shots"]["approve"]["ev"]
     n = PLAN["shots"]["approve"]["len"]
     B.set_lid(hinge, 110)
@@ -324,7 +324,7 @@ def shot_approve(S):
     rp = RAMPS("approve")
 
     def frame(lf):
-        face = "bar-ask" if lf < ev["open"] else "ask" if lf < ev["allow"] + 2 else "sub"
+        face = "ask" if lf < ev["allow"] + 2 else "ask-codex"   # the panel is already open where reveal lands
         scr.show(face)
         tt = remap(lf, rp)
         d = ease(ss(ev["click"] - 5, ev["click"] + 16, tt), 2.6)
@@ -441,7 +441,7 @@ LEGENDS = {"ctrl": [("control", 2.4, 0.0, -0.28), ("^", 3.6, 0.28, 0.22)], "opt"
 def shot_keys(S):
     """Macro of the keyboard: ⌃⌥Y goes down on the kick, then ⌃⌥N; the request screen glows out of focus behind."""
     sc, cam, hinge = scene("ask", screen=1.1, key=0.5, fill=0.5, samples=S)
-    scr = Screen(["ask", "sub"])
+    scr = Screen(["ask", "ask-claude"])
     keys, rects = split_keys()
     ev = PLAN["shots"]["keys"]["ev"]
     n = PLAN["shots"]["keys"]["len"]
@@ -532,7 +532,7 @@ def shot_plan(S):
 def shot_risky(S):
     """The red row lights the desk and the aluminium; nothing else is lit; Deny; the pull-back."""
     sc, cam, hinge = scene("ask", screen=0.9, key=0.25, fill=0.25, samples=S)
-    scr = Screen(["ask", "sub"])
+    scr = Screen(["ask", "ask-claude"])
     ev = PLAN["shots"]["risky"]["ev"]
     n = PLAN["shots"]["risky"]["len"]
     B.set_lid(hinge, 110)
@@ -563,15 +563,16 @@ def shot_risky(S):
         pulse = 0.85 + 0.15 * math.sin(lf / 30 * 2 * math.pi * 1.0)
         red.data.energy = 40.0 * on * pulse * (1 - ss(ev["deny"], ev["deny"] + 2, lf))
         red_low.data.energy = 55.0 * on * pulse
-        scr.show("ask" if lf < ev["deny"] + 2 else "sub", 1.0 - 0.25 * on)
+        scr.show("ask" if lf < ev["deny"] + 2 else "ask-claude", 1.0 - 0.25 * on)
         tint.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.22 * row_on * pulse
         tt = remap(lf, rp)
         push = ease(ss(-HANDLE, ev["tryKey"] + 8, tt), 1.8)
         m = ease(ss(ev["move"] - 6, ev["move"] + 18, tt), 2.6)
-        wide = ease(ss(ev["deny"] + 4, ev["deny"] + 28, tt), 2.6)
+        wide = ease(ss(ev["deny"] + 4, ev["deny"] + 46, tt), 2.2)
         loc = (focus + (base_l - focus) * lerp(1.0, 0.85, push)).lerp(loc_d, m).lerp(wide_l, wide)
         tgt = base_t.lerp(dpt, m).lerp(wide_t, wide)
         loc += (focus - loc) * (0.05 * bump(lf, ev["tryKey"], 2, 10))
+        loc += (dpt - loc) * (0.12 * ss(ev["move"] + 14, ev["deny"], tt) * (1 - wide))   # creep in on Deny, no dead hold
         cam_set(cam, loc, tgt, lerp(50, 40, wide), lerp(5.6, 8.0, wide), focus.lerp(dpt, m).lerp(wide_t, wide),
                 shk=shake(lf, [ev["tryKey"], ev["deny"]], 0.9, 1.0))
     return sc, frame
@@ -656,7 +657,7 @@ def ghost_terms(ev):
     Dramatisation of Keep awake."""
     # (x, y, top z, tilt deg, rise delay, scroll speed)
     spots = [(-0.25, 0.05, 0.25, 9, 0, 1.0), (0.24, 0.07, 0.27, -8, 3, 1.3), (0.0, 0.14, 0.33, 0, 6, 0.8),
-             (-0.13, -0.02, 0.15, 5, 9, 1.6), (0.14, -0.01, 0.17, -5, 12, 1.1)]
+             (-0.04, 0.24, 0.44, 4, 9, 1.6), (0.14, -0.01, 0.17, -5, 12, 1.1)]
     W, H, BAR = 0.20, 0.14, 0.009
     out = []
     for i, (x, y, z, tilt, dl, sp) in enumerate(spots):

@@ -37,6 +37,9 @@ SNAPS_ANIM = {
     "bar-ask": "public/snap4/ask.png",
     "bar-projects": "public/snap4/projects.png",
     "bar-one": "public/snap4/one.png",
+    # after one click only one request is resolved: Allow on Claude's leaves Codex's waiting, Deny on Codex's leaves Claude's
+    "ask-codex": "public/snap5/ask-codex.png",
+    "ask-claude": "public/snap5/ask-claude.png",
 }
 
 
