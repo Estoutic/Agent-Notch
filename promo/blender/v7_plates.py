@@ -514,11 +514,12 @@ def shot_night(S):
     lamp = V.light("Lamp", 'AREA', (0.7, -0.2, 0.6), (0, 0, 0.05), 25.0, (1.0, 0.78, 0.55), size=0.5, size_y=0.5)
     sc.view_settings.exposure = 0.4
     hz0, hz1 = B.HINGE_Z * MM, (B.DECK + 0.9) * MM
+    ghosts = ghost_terms(ev)
 
     def lid_at(lf):
         if lf < ev["open"]:
-            return lerp(108, 3, ease(ss(-4, ev["shut"], lf), 2.4))
-        return lerp(3, 34, ease(ss(ev["open"], n + 6, lf), 2.0))
+            return lerp(108, 0, ease(ss(-4, ev["shut"], lf), 2.4))   # shut all the way
+        return lerp(0, 34, ease(ss(ev["open"], n + 6, lf), 2.0))
 
     def frame(lf):
         a = lid_at(lf)
@@ -531,7 +532,7 @@ def shot_night(S):
         gapk = 1 - ss(3, 12, a)
         out = 1 - ss(ev["shut"] + 2, ev["out"] + 6, lf)
         opening = ss(ev["open"], ev["open"] + 10, lf)
-        k = gapk * (max(out, 0.45) if lf < ev["open"] else 0.0) + opening * (1 - ss(14, 34, a)) * 0.8
+        k = gapk * (max(out, 0.12) if lf < ev["open"] else 0.0) + opening * (1 - ss(14, 34, a)) * 0.8
         leak.data.energy = 0.04 * k
         line_k.inputs[1].default_value = 3.0 * k
         line.scale = (1.0, max(0.05, lerp(0.35, 1.0, out)), 1.0)
@@ -551,11 +552,92 @@ def shot_night(S):
         sun.data.energy = lerp(0.0, 14.0, night) * (1 - morning) + 24.0 * morning
         sun.data.color = Vector((0.55, 0.68, 1.0)).lerp(Vector((1.0, 0.74, 0.48)), morning)
         wn.inputs["Color"].default_value = (*Vector((0.010, 0.018, 0.045)).lerp(Vector((0.05, 0.040, 0.034)), morning), 1)
+        ghosts(lf)
+        # with the lid shut the camera rises and pulls back to hold the ghosts above the Mac; it settles at dawn
+        up = ss(ev["out"] - 6, ev["out"] + 14, lf) * (1 - ss(ev["dawn"] - 4, ev["open"] + 6, lf))
         tt = (lf + HANDLE) / (n + HANDLE)
-        loc = Vector((lerp(0.06, 0.0, tt), lerp(-0.80, -0.70, tt), lerp(0.24, 0.21, tt)))
-        tgt = Vector((0.0, -0.04, lerp(0.10, 0.03, ss(-4, ev["shut"], lf))))
-        cam_set(cam, loc, tgt, 45, 5.6, Vector((0, -0.12, 0.02)))
+        loc = Vector((lerp(0.06, 0.0, tt), lerp(-0.80, -0.70, tt) - 0.30 * up, lerp(0.24, 0.21, tt) + 0.10 * up))
+        tgt = Vector((0.0, -0.04 + 0.06 * up, lerp(0.10, 0.03, ss(-4, ev["shut"], lf)) + 0.12 * up))
+        cam_set(cam, loc, tgt, 45, lerp(5.6, 8.0, up), Vector((0, -0.12 + 0.12 * up, 0.02 + 0.13 * up)))
     return sc, frame
+
+
+def ghost_terms(ev):
+    """Night: with the lid shut, translucent terminals float up out of the closed Mac and their logs keep running.
+    Dramatisation of Keep awake."""
+    # (x, y, top z, tilt deg, rise delay, scroll speed)
+    spots = [(-0.25, 0.05, 0.25, 9, 0, 1.0), (0.24, 0.07, 0.27, -8, 3, 1.3), (0.0, 0.14, 0.33, 0, 6, 0.8),
+             (-0.13, -0.02, 0.15, 5, 9, 1.6), (0.14, -0.01, 0.17, -5, 12, 1.1)]
+    W, H, BAR = 0.20, 0.14, 0.009
+    out = []
+    for i, (x, y, z, tilt, dl, sp) in enumerate(spots):
+        parts = []
+        for kind, h, img in (("log", H, f"ghostlog-{i}.png"), ("bar", BAR, f"ghostbar-{i}.png")):
+            bpy.ops.mesh.primitive_plane_add(size=1, location=(0, 0, 0), rotation=(math.radians(90), 0, 0))
+            ob = bpy.context.active_object
+            ob.name = f"Ghost{i}-{kind}"
+            ob.scale = (W, h, 1)
+            m = bpy.data.materials.new(ob.name)
+            m.use_nodes = True
+            m.surface_render_method = 'BLENDED'
+            nt = m.node_tree
+            for nd in list(nt.nodes):
+                nt.nodes.remove(nd)
+            tc = nt.nodes.new("ShaderNodeTexCoord")
+            mp = nt.nodes.new("ShaderNodeMapping")
+            tex = nt.nodes.new("ShaderNodeTexImage")
+            tex.image = bpy.data.images.load(os.path.join(V7, img))
+            tex.extension = 'REPEAT'
+            nt.links.new(tc.outputs["UV"], mp.inputs["Vector"])
+            nt.links.new(mp.outputs["Vector"], tex.inputs["Vector"])
+            if kind == "log":   # show 19 of the 40 log rows; offset scrolls them
+                mp.inputs["Scale"].default_value = (1, 19 / 40, 1)
+            tint = nt.nodes.new("ShaderNodeMixRGB")
+            tint.blend_type = 'MULTIPLY'
+            tint.inputs["Fac"].default_value = 0.55
+            tint.inputs["Color2"].default_value = (0.55, 0.85, 1.0, 1)
+            nt.links.new(tex.outputs["Color"], tint.inputs["Color1"])
+            em = nt.nodes.new("ShaderNodeEmission")
+            nt.links.new(tint.outputs["Color"], em.inputs["Color"])
+            tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+            mix = nt.nodes.new("ShaderNodeMixShader")
+            nt.links.new(tr.outputs[0], mix.inputs[1])
+            nt.links.new(em.outputs[0], mix.inputs[2])
+            mo = nt.nodes.new("ShaderNodeOutputMaterial")
+            nt.links.new(mix.outputs[0], mo.inputs["Surface"])
+            # ghostly: the window body is a faint veil, the text glows through it
+            bw = nt.nodes.new("ShaderNodeRGBToBW")
+            nt.links.new(tex.outputs["Color"], bw.inputs["Color"])
+            op = nt.nodes.new("ShaderNodeMapRange")
+            op.inputs["From Max"].default_value = 0.35
+            op.inputs["To Min"].default_value = 0.22 if kind == "log" else 0.6
+            nt.links.new(bw.outputs[0], op.inputs["Value"])
+            fac = nt.nodes.new("ShaderNodeMath")
+            fac.operation = 'MULTIPLY'
+            nt.links.new(op.outputs[0], fac.inputs[0])
+            nt.links.new(fac.outputs[0], mix.inputs["Fac"])
+            ob.data.materials.append(m)
+            parts.append((ob, kind, h, mp, em, fac))
+        out.append((parts, x, y, z, tilt, dl, sp))
+
+    def frame(lf):
+        for parts, x, y, z, tilt, dl, sp in out:
+            a0 = ev["out"] - 4 + dl
+            k = ss(a0, a0 + 12, lf) * (1 - ss(ev["dawn"] - 2 + dl * 0.3, ev["dawn"] + 10, lf))
+            rise = ease(ss(a0, a0 + 22, lf), 2.2)
+            zc = lerp(0.02, z - H / 2, rise) + 0.004 * math.sin(lf * 0.12 + x * 20)
+            for ob, kind, h, mp, em, fac in parts:
+                ob.hide_render = k < 0.01
+                zz = zc + (H / 2 + h / 2 if kind == "bar" else 0.0)
+                ob.location = (x, y, zz)
+                ob.rotation_euler = (math.radians(90 - 6 * (1 - rise)), 0, math.radians(tilt))
+                s_ = lerp(0.6, 1.0, rise)
+                ob.scale = (W * s_, h * s_, 1)
+                fac.inputs[1].default_value = 0.9 * k
+                em.inputs["Strength"].default_value = 2.2 * k
+                if kind == "log":
+                    mp.inputs["Location"].default_value = (0, -(lf * sp * 0.012) % 1.0, 0)
+    return frame
 
 
 THEME_LIGHT = {"terminal": (0.25, 1.0, 0.45), "glass": (0.7, 0.78, 1.0), "paper": (1.0, 0.93, 0.8), "midnight": (0.3, 0.42, 1.0),

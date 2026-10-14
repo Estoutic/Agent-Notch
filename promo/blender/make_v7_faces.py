@@ -4,6 +4,7 @@ notch, and the matching lid-glass face for Blender.
   python3 make_v7_faces.py            writes cache/v7/desktop-<name>.png and cache/v7/face-<name>.png
   python3 make_v7_faces.py --anim     the extra faces of the animatic (gate 3)
   python3 make_v7_faces.py --terms    cascade terminal textures
+  python3 make_v7_faces.py --ghosts   night shot: ghost terminal logs and title bars
 
 Stage geometry (src/world.tsx): @2x pixels, hardware notch [792, 1160], centre 976; the screen is 3024 wide, so the
 stage origin sits 536 px right of the screen's left edge. The @3x snapshots share the stage origin (their notch bar
@@ -109,7 +110,7 @@ def main():
         print("wrote", name)
 
 
-if __name__ == "__main__" and "--terms" not in __import__("sys").argv:
+if __name__ == "__main__" and not {"--terms", "--ghosts"} & set(__import__("sys").argv):
     main()
 
 
@@ -155,5 +156,34 @@ def terminals():
     print("wrote", len(TERM_TITLES), "terminals")
 
 
+GHOST_TITLES = [("claude", "wedding-app"), ("codex", "billing-api"), ("claude", "agenttrack"), ("codex", "infra"),
+                ("claude", "hexhaven")]
+
+
+def ghosts():
+    """Night shot: a tall, seamlessly repeating log per ghost terminal (scrolled in Blender) and its title bar."""
+    from PIL import ImageFont
+    mono = os.path.join(PROMO, "node_modules", "geist", "dist", "fonts", "geist-mono", "GeistMono-Medium.ttf")
+    sans = os.path.join(PROMO, "node_modules", "geist", "dist", "fonts", "geist-sans", "Geist-Medium.ttf")
+    fm, fs = ImageFont.truetype(mono, 30), ImageFont.truetype(sans, 28)
+    for i, (kind, proj) in enumerate(GHOST_TITLES):
+        w, rows = 1200, 40
+        im = Image.new("RGB", (w, rows * 40), (0, 0, 0))
+        d = ImageDraw.Draw(im)
+        for j in range(rows):
+            t, c = TERM_LINES[(j * 3 + i * 5) % len(TERM_LINES)] if j % 7 else TERM_LINES[(j + i) % len(TERM_LINES)]
+            d.text((28, j * 40 + 6), t, font=fm, fill=c)
+        im.save(os.path.join(OUT, f"ghostlog-{i}.png"))
+        bar = Image.new("RGB", (w, 56), (40, 40, 44))
+        b = ImageDraw.Draw(bar)
+        for k, c in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
+            b.ellipse((22 + k * 34, 18, 42 + k * 34, 38), fill=c)
+        b.text((w / 2, 28), f"{kind} — {proj}", font=fs, fill=(200, 200, 206), anchor="mm")
+        bar.save(os.path.join(OUT, f"ghostbar-{i}.png"))
+    print("wrote", len(GHOST_TITLES), "ghost terminals")
+
+
 if __name__ == "__main__" and "--terms" in __import__("sys").argv:
     terminals()
+if __name__ == "__main__" and "--ghosts" in __import__("sys").argv:
+    ghosts()
