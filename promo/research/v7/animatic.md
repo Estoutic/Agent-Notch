@@ -163,3 +163,16 @@ highlights sat off the UI.
   denies Codex's `rm -rf`, and the panel folds. The keys plate is no longer rendered.
 
 MP4: 71.85 s, 2154 frames, −14.0 LUFS, −1.5 dBTP. Plates: 11 shots, 529 s.
+
+## Owner notes, round 4
+
+The six notes and what changed:
+
+1. **Prompts in the card.** CardShot7 now clicks a fifth tab, Prompts (snap5/card-prompts.png, rendered by the app). The tab beats are EV7.card: 0.6 / 2.75 / 4.9 / 7.05 / 9.2.
+2. **Crooked highlights.** USAGE_SPOTS in Aware7 were re-measured on usage.png. The ask highlights are still baked into the faces, which were regenerated from the new snapshots. The snapshot sizes did not change.
+3. **Music.** MUSIC7 was re-cut so no track beat repeats within 16 film beats. There are two joins: beat 34 (track 24 → 32) and beat 50 (track 48 → 0), each with a 40 ms crossfade. The night enters on the measured downbeat 68. The master is −14.0 LUFS and −1.5 dBTP. This was checked numerically; nobody has listened to it yet.
+4. **Cascade.** The cascade grows 4 → 8 → 12 terminals on the beat (frames 0, 18, 33), and the camera pulls back on each step.
+5. **Effort.** All snap4 and snap5 images were re-shot from master 5eb79de. The effort row part is off in the default preset, so the snapshot run turns it on (AGENT_NOTCH_SNAPSHOT_EFFORT=1, scratch build only). The bars now show next to the model in every row.
+6. **After the night.** The lid opens all the way. The five ghosts dive into the screen, nearest first. Each one lands as a real "done" toast from a different project (snap5/toast-night-0..4). The camera swings to face the screen and flies into it. Trust comes in with a new `through` transition (scale 0.86 → 1, blur 10 → 0). The light wash is gone. The captions are "Keep awake." and then "Done by morning."
+
+Known issue: the fly-through lands on trust's first frame, which has no text yet, so there are about 6 dark frames (around film frame 1624).
