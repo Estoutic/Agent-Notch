@@ -36,12 +36,12 @@ export const V7: Shot7[] = [
   {id: 'usage', beats: 5, kind: '2d', k: 1.25, in: {type: 'dissolve', x: 6, note: 'the panel row becomes the usage card'}},
   {id: 'jump', beats: 4, kind: '2d', in: CUT},
   {id: 'keys', beats: 6, kind: '3d', in: CUT}, // jump ends in a whip; the music jumps back to groove 2 on this cut
-  {id: 'question', beats: 8, kind: '3d', in: {type: 'zoom', x: 6, note: 'the pressed key becomes the next panel button'}},
-  {id: 'plan', beats: 10, kind: '3d', in: {type: 'dissolve', x: 5, note: 'answered question -> the plan on the same panel'}},
+  {id: 'question', beats: 6, kind: '3d', in: {type: 'zoom', x: 6, note: 'the pressed key becomes the next panel button'}},
+  {id: 'plan', beats: 8, kind: '3d', in: {type: 'dissolve', x: 5, note: 'answered question -> the plan on the same panel'}},
   {id: 'risky', beats: 10, kind: '3d', in: CUT}, // cut on the breakdown: everything goes dark, the red row lights the desk
   {id: 'card', beats: 11, kind: '2d', k: 11 / 9, in: {type: 'zoom', x: 6, note: 'the red row becomes the Deny chip, then the card'}},
   {id: 'toast', beats: 4, kind: '2d', in: CUT},
-  {id: 'night', beats: 8, kind: '3d', in: {type: 'dissolve', x: 12, note: 'the toast becomes the closing lid'}},
+  {id: 'night', beats: 12, kind: '3d', in: {type: 'dissolve', x: 12, note: 'the toast becomes the closing lid'}},
   {id: 'trust', beats: 5, kind: '2d', in: {type: 'light', x: 10, note: 'the lid light line becomes the morning'}},
   {id: 'sounds', beats: 4, kind: '2d', in: CUT},
   {id: 'themes', beats: 8, kind: '3d', in: CUT},
@@ -71,16 +71,16 @@ export const local7 = (p: Placed7, beat: number) => beatFrame(p.startBeat + beat
  *   0-8     intro (as v4)
  *   8-10    dead stop: "You."
  *   10-54   drop and groove, offset 10 (as v4): the first breakdown sits under swarm (34-42)
- *   54-102.5 back three bars on the cut to keys (offset 22): groove 2 re-enters on the keys; breakdown 2 = risky (78-86)
- *   102.5-105 silence before the night (room tone only)
- *   105-111 the softer stretch under the night time-lapse (offset 14)
+ *   54-98.5 back two bars on the cut to keys (offset 18): groove 2 re-enters on the keys; breakdown 2 = risky (74-82)
+ *   98.5-101 silence before the night (room tone only)
+ *   101-111 the softer stretch under the night time-lapse (offset 14)
  *   111-     the morning: groove 3 from bar 77 (offset 34); the final hit lands at film beat 138.8 = end + 1.8 (v4: 1.81)
  */
 export const MUSIC7: MusicSeg[] = [
   {from: 0, to: 8, src: -8},
   {from: 10, to: 54, src: 0},
-  {from: 54, to: 102.5, src: 32},
-  {from: 105, to: 111, src: 91},
+  {from: 54, to: 98.5, src: 36},
+  {from: 101, to: 111, src: 87},
   {from: 111, to: 147, src: 77},
 ];
 export const HIT7 = undefined; // the track's own final hit (track beat 104.8) plays out; no synth hit
@@ -95,9 +95,9 @@ export const EV7 = {
   open: EV.open,
   keys: {y: 1.5, n: 3.75},
   question: {pick: 3.5, resume: 4.25},
-  plan: {approve: 7},
+  plan: {approve: 6},
   risky: {tryKey: 1.75, move: 4, deny: 6.75},
-  night: {shut: 1.5, out: 2.25, dawn: 5.5, open: 6.5},
+  night: {shut: 1.5, out: 2.25, dawn: 9.0, open: 10.0},
   themes: {first: 0},
   end: {hit: HIT7_BEAT - 137, install: 2.6, url: 4.0},
 } as const;
@@ -123,7 +123,7 @@ const CUES7: Partial<Record<Shot7Id, Cue7[]>> = {
   question: [{b: 0, s: 'whoosh', d: 0.5, v: 0.4}, {b: EV7.question.pick, s: 'click'}, {b: EV7.question.pick + 0.05, s: 'approve', v: 0.8}],
   plan: [{b: 1.5, s: 'type', d: 1.5, v: 0.35}, {b: EV7.plan.approve, s: 'click'}, {b: EV7.plan.approve + 0.05, s: 'approve'}],
   risky: [{b: 0, s: 'sub', v: 0.9}, {b: 0, s: 'buzz', v: 0.7}, ...keyCombo(EV7.risky.tryKey, false).slice(0, 3), {b: EV7.risky.deny, s: 'click'}, {b: EV7.risky.deny + 0.05, s: 'deny'}],
-  night: [ // no whoosh: the night opens inside the pre-night silence (102.5-105)
+  night: [ // no whoosh: the night opens inside the pre-night silence (98.5-101)
     {b: EV7.night.shut, s: 'lid'}, {b: EV7.night.shut + 0.05, s: 'latch', v: 0.8},
     {b: EV7.night.out, s: 'roomNight', d: EV7.night.dawn - EV7.night.out, v: 1}, {b: EV7.night.dawn, s: 'birds', d: 2.5, v: 0.6},
     {b: EV7.night.open, s: 'lid', v: 0.6, p: 1.2}, {b: EV7.night.open + 0.6, s: 'chime', p: 1.5, v: 0.5},
@@ -151,5 +151,5 @@ export const cues7 = (shots: Shot7[] = V7): AbsCue[] => {
 /** Room tone: day under the whole film, night under the night shot (the synth crossfades them). */
 export const ROOM7 = (() => {
   const n = place7().find((p) => p.id === 'night')!;
-  return {nightFrom: n.from + local7(n, EV7.night.out), nightTo: n.from + local7(n, EV7.night.dawn), silenceFrom: beatFrame(102.5), silenceTo: beatFrame(105)};
+  return {nightFrom: n.from + local7(n, EV7.night.out), nightTo: n.from + local7(n, EV7.night.dawn), silenceFrom: beatFrame(98.5), silenceTo: beatFrame(101)};
 })();
