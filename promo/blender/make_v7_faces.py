@@ -2,6 +2,8 @@
 notch, and the matching lid-glass face for Blender.
 
   python3 make_v7_faces.py            writes cache/v7/desktop-<name>.png and cache/v7/face-<name>.png
+  python3 make_v7_faces.py --anim     the extra faces of the animatic (gate 3)
+  python3 make_v7_faces.py --terms    cascade terminal textures
 
 Stage geometry (src/world.tsx): @2x pixels, hardware notch [792, 1160], centre 976; the screen is 3024 wide, so the
 stage origin sits 536 px right of the screen's left edge. The @3x snapshots share the stage origin (their notch bar
@@ -22,6 +24,19 @@ SNAPS = {
     "swarm": "public/snap4/swarm.png",
     "awake": "public/snap4/awake/swarm.png",
 }
+# v7 animatic (gate 3): more panels, and "bar-" faces with the notch bar only (panel closed)
+SNAPS_ANIM = {
+    "one": "public/snap4/one.png",
+    "multi": "public/snap4/multi.png",
+    "sub": "public/snap4/sub.png",
+    "projects": "public/snap4/projects.png",
+    "question": "public/snap4/question.png",
+    "plan": "public/snap4/plan.png",
+    "awake-sub": "public/snap4/awake/sub.png",
+    "bar-ask": "public/snap4/ask.png",
+    "bar-projects": "public/snap4/projects.png",
+    "bar-one": "public/snap4/one.png",
+}
 
 
 def wallpaper():
@@ -34,7 +49,7 @@ def wallpaper():
     return w
 
 
-def desktop(src):
+def desktop(src, bar_only=False):
     shot = Image.open(os.path.join(PROMO, src)).convert("RGB")
     s = shot.resize((round(shot.width * 2 / 3), round(shot.height * 2 / 3)), Image.LANCZOS)
     d = wallpaper()
@@ -50,10 +65,11 @@ def desktop(src):
     row = [x for x in range(s.width) if sum(s.getpixel((x, 10))) < 15]
     ImageDraw.Draw(bar).rounded_rectangle((row[0], -20, row[-1], BAR - 1), radius=14, fill=255)
     m = Image.new("L", s.size, 0)
-    m.paste(box, (0, 0), box)
+    if not bar_only:
+        m.paste(box, (0, 0), box)
     m.paste(bar, (0, 0), bar)
     # soft shadow under the panel
-    sh = m.filter(ImageFilter.GaussianBlur(30))
+    sh = m.filter(ImageFilter.GaussianBlur(30)) if not bar_only else Image.new("L", s.size, 0)
     d.paste(Image.new("RGB", s.size, (0, 0, 0)), (SX0, 14), sh.point(lambda v: v * 0.7))
     # menu bar: translucent dark strip with the snapshot's own menu titles
     mb = d.crop((0, 0, DW, BAR)).point(lambda v: int(v * 0.6 + 8))
@@ -84,12 +100,60 @@ def main():
         mm = Image.open(mask).convert("RGB")
         rr, _, bb = mm.split()
         Image.merge("RGB", (rr, Image.new("L", mm.size, 0), bb)).save(noglow)
-    for name, src in SNAPS.items():
-        d = desktop(src)
+    import sys
+    snaps = SNAPS_ANIM if "--anim" in sys.argv else SNAPS
+    for name, src in snaps.items():
+        d = desktop(src, bar_only=name.startswith("bar-"))
         d.save(os.path.join(OUT, f"desktop-{name}.png"))
         face(d, mask).save(os.path.join(OUT, f"face-{name}.png"))
         print("wrote", name)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and "--terms" not in __import__("sys").argv:
     main()
+
+
+# ---------------------------------------------------------------- v7 animatic: cascade terminals
+TERM_TITLES = [("claude", "wedding-app"), ("codex", "CONF-360"), ("claude", "hexhaven"), ("claude", "agenttrack"),
+               ("codex", "audit-b10"), ("claude", "docs/upload"), ("codex", "release-notes"), ("claude", "stickers"),
+               ("claude", "billing-api"), ("codex", "infra"), ("claude", "design-system"), ("codex", "mobile-shell")]
+TERM_LINES = [
+    ("● Read(apps/api/src/routes/upload.ts)", (154, 154, 160)), ("  → Read 214 lines", (110, 110, 116)),
+    ("● Edit(src/services/media.ts)", (154, 154, 160)), ("  → Updated with 12 additions, 3 removals", (110, 110, 116)),
+    ("● Bash(pnpm --filter api test)", (154, 154, 160)), ("  → PASS src/services/media.test.ts (38)", (48, 209, 88)),
+    ("● Grep(\"compress\", path: apps/)", (154, 154, 160)), ("  → Found 9 files", (110, 110, 116)),
+    ("● Task(Explore · routes)", (154, 154, 160)), ("  → Done (14 tool uses · 31.2k tokens)", (110, 110, 116)),
+    ("● Update Todos", (154, 154, 160)), ("  → [x] Read the upload code", (110, 110, 116)),
+    ("     [ ] Add WebCodecs compression", (110, 110, 116)), ("● Write(src/services/media.ts)", (154, 154, 160)),
+    ("  → Wrote 88 lines", (110, 110, 116)), ("● Bash(git diff --stat)", (154, 154, 160)),
+]
+
+
+def terminals():
+    from PIL import ImageFont
+    mono = os.path.join(PROMO, "node_modules", "geist", "dist", "fonts", "geist-mono", "GeistMono-Medium.ttf")
+    sans = os.path.join(PROMO, "node_modules", "geist", "dist", "fonts", "geist-sans", "Geist-Medium.ttf")
+    fm, fs = ImageFont.truetype(mono, 30), ImageFont.truetype(sans, 28)
+    for i, (kind, proj) in enumerate(TERM_TITLES):
+        w, h = 1200, 780
+        im = Image.new("RGB", (w, h), (14, 14, 16))
+        d = ImageDraw.Draw(im)
+        d.rectangle((0, 0, w, 56), fill=(30, 30, 33))
+        for k, c in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
+            d.ellipse((22 + k * 34, 18, 42 + k * 34, 38), fill=c)
+        d.text((w / 2, 28), f"{kind} — {proj}", font=fs, fill=(170, 170, 176), anchor="mm")
+        y = 80
+        for j in range(17):
+            t, c = TERM_LINES[(j + i * 3) % len(TERM_LINES)]
+            d.text((28, y), t, font=fm, fill=c)
+            y += 40
+        if i == 0:   # the one that will stop and ask
+            d.rectangle((20, h - 150, w - 20, h - 20), outline=(255, 176, 31), width=3)
+            d.text((44, h - 130), "Bash command   pnpm --filter api test", font=fm, fill=(240, 240, 242))
+            d.text((44, h - 82), "Do you want to proceed?", font=fm, fill=(255, 176, 31))
+        im.save(os.path.join(OUT, f"term-{i}.png"))
+    print("wrote", len(TERM_TITLES), "terminals")
+
+
+if __name__ == "__main__" and "--terms" in __import__("sys").argv:
+    terminals()

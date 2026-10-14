@@ -10,27 +10,30 @@
  */
 import {writeFileSync, mkdirSync, existsSync, unlinkSync} from 'node:fs';
 import {execFileSync, spawnSync} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
+import {resolve} from 'node:path';
 import {PROMO, VERTICAL, FPS, FPB, OFFSET_FRAMES, BPM, cues, sections, filmFrames, MUSIC, MUSIC_FILE, TRACK_DROP_S, TRACK_BPM, type ShotDef, type MusicSeg} from '../src/timeline.ts';
 
-type Cue = {f: number; s: string; d?: number; v?: number; p?: number};
-const SR = 48000;
-const BEAT_S = 60 / BPM;
-const TAU = Math.PI * 2;
+export type Cue = {f: number; s: string; d?: number; v?: number; p?: number};
+export const SR = 48000;
+export const BEAT_S = 60 / BPM;
+export const TAU = Math.PI * 2;
 
 /* ---------- deterministic noise ---------- */
 let seed = 1;
-const rnd = () => {
+export const setSeed = (v: number) => { seed = v; };
+export const rnd = () => {
   seed = (seed * 1664525 + 1013904223) >>> 0;
   return seed / 4294967296;
 };
-const noise = () => rnd() * 2 - 1;
+export const noise = () => rnd() * 2 - 1;
 
 /* ---------- buses ---------- */
-type Bus = {L: Float32Array; R: Float32Array};
-const bus = (n: number): Bus => ({L: new Float32Array(n), R: new Float32Array(n)});
+export type Bus = {L: Float32Array; R: Float32Array};
+export const bus = (n: number): Bus => ({L: new Float32Array(n), R: new Float32Array(n)});
 
 /** Writes a mono voice into a bus with pan (-1..1) and an optional reverb send. */
-class Mix {
+export class Mix {
   dry: Bus; wet: Bus; n: number;
   constructor(n: number) { this.n = n; this.dry = bus(n); this.wet = bus(n); }
   put(t0: number, dur: number, fn: (t: number, i: number) => number, gain = 1, pan = 0, send = 0) {
@@ -48,7 +51,7 @@ class Mix {
 }
 
 /* ---------- filters ---------- */
-class Biquad {
+export class Biquad {
   b0 = 1; b1 = 0; b2 = 0; a1 = 0; a2 = 0; x1 = 0; x2 = 0; y1 = 0; y2 = 0;
   set(type: 'lp' | 'hp' | 'bp', f: number, q = 0.707) {
     const w = TAU * Math.min(f, SR * 0.45) / SR, c = Math.cos(w), s = Math.sin(w), a = s / (2 * q);
@@ -67,8 +70,8 @@ class Biquad {
   }
 }
 
-const saw = (ph: number) => 2 * (ph - Math.floor(ph + 0.5));
-const sq = (ph: number) => (ph - Math.floor(ph) < 0.5 ? 1 : -1);
+export const saw = (ph: number) => 2 * (ph - Math.floor(ph + 0.5));
+export const sq = (ph: number) => (ph - Math.floor(ph) < 0.5 ? 1 : -1);
 const env = (t: number, a: number, d: number) => (t < a ? t / a : Math.exp(-(t - a) / d));
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -136,7 +139,7 @@ const thump = (m: Mix, t0: number, g = 1) => {
 };
 
 /* ---------- SFX ---------- */
-const sfx = (m: Mix, c: Cue, t0: number) => {
+export const sfx = (m: Mix, c: Cue, t0: number) => {
   const v = c.v ?? 1, p = c.p ?? 1, d = (c.d ?? 8) / FPS;
   switch (c.s) {
     case 'whoosh': {
@@ -283,7 +286,7 @@ const sfx = (m: Mix, c: Cue, t0: number) => {
 };
 
 /* ---------- reverb (Schroeder) ---------- */
-const reverb = (x: Float32Array, n: number, off: number, fb = 0.8) => {
+export const reverb = (x: Float32Array, n: number, off: number, fb = 0.8) => {
   const out = new Float32Array(n);
   const combs = [1557, 1617, 1491, 1422].map((d) => ({buf: new Float32Array(d + off), i: 0, fb, lp: 0}));
   const aps = [225, 556].map((d) => ({buf: new Float32Array(d + off), i: 0}));
@@ -310,10 +313,10 @@ const reverb = (x: Float32Array, n: number, off: number, fb = 0.8) => {
 };
 
 /* ---------- music: the track, edited ---------- */
-const filmT = (beat: number) => (OFFSET_FRAMES + beat * FPB) / FPS; // exact, not frame-rounded
-const srcT = (beat: number) => TRACK_DROP_S + (beat * 60) / TRACK_BPM;
+export const filmT = (beat: number) => (OFFSET_FRAMES + beat * FPB) / FPS; // exact, not frame-rounded
+export const srcT = (beat: number) => TRACK_DROP_S + (beat * 60) / TRACK_BPM;
 
-const decode = (file: string): Bus | null => {
+export const decode = (file: string): Bus | null => {
   if (!existsSync(file)) return null;
   const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-f', 'f32le', '-ac', '2', '-ar', String(SR), '-'], {maxBuffer: 1 << 30});
   const n = raw.length / 8;
@@ -324,7 +327,7 @@ const decode = (file: string): Bus | null => {
 };
 
 /** Copies track [s0, s0 + len) to film time t0 with raised-cosine fades (fi, fo seconds) at the ends. */
-const place = (dst: Bus, src: Bus, t0: number, s0: number, len: number, fi: number, fo: number) => {
+export const place = (dst: Bus, src: Bus, t0: number, s0: number, len: number, fi: number, fo: number) => {
   const a = Math.round(t0 * SR), b = Math.round(s0 * SR), n = Math.round(len * SR);
   const ni = Math.max(1, Math.round(fi * SR)), no = Math.max(1, Math.round(fo * SR));
   for (let i = 0; i < n; i++) {
@@ -337,7 +340,7 @@ const place = (dst: Bus, src: Bus, t0: number, s0: number, len: number, fi: numb
 };
 
 const XF = 0.01; // crossfade at every cut
-const editTrack = (dst: Bus, track: Bus, segs: MusicSeg[], hit?: number) => {
+export const editTrack = (dst: Bus, track: Bus, segs: MusicSeg[], hit?: number) => {
   const pts: string[] = [];
   segs.forEach((s, i) => {
     const prev = segs[i - 1], next = segs[i + 1];
@@ -376,7 +379,7 @@ const bed = (m: Mix, shots: ShotDef[], hit = Infinity) => {
 };
 
 /* ---------- render ---------- */
-const writeWav = (file: string, L: Float32Array, R: Float32Array) => {
+export const writeWav = (file: string, L: Float32Array, R: Float32Array) => {
   const n = L.length;
   const buf = Buffer.alloc(44 + n * 8);
   buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 8, 4); buf.write('WAVE', 8);
@@ -387,9 +390,9 @@ const writeWav = (file: string, L: Float32Array, R: Float32Array) => {
   writeFileSync(file, buf);
 };
 
-const LUFS = -14, TP = -1.5;
-const ACCENTS = new Set(['impact', 'boom', 'thud', 'riser', 'swell', 'whoosh']);
-const measure = (file: string, extra = '') => {
+export const LUFS = -14, TP = -1.5;
+export const ACCENTS = new Set(['impact', 'boom', 'thud', 'riser', 'swell', 'whoosh']);
+export const measure = (file: string, extra = '') => {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', file, '-af', `${extra}loudnorm=I=${LUFS}:TP=${TP}:LRA=11:print_format=json`, '-f', 'null', '-'], {encoding: 'utf8', maxBuffer: 1 << 26}).stderr;
   return JSON.parse(r.slice(r.lastIndexOf('{'), r.lastIndexOf('}') + 1));
 };
@@ -460,7 +463,20 @@ const render = (shots: ShotDef[], segs: MusicSeg[], hit: number | undefined, fil
   console.log(`  music edit${hitT === undefined ? ' (the track plays to its own ending)' : ` (synth hit at film ${hitT.toFixed(3)} s)`}:\n  ` + edit.join('\n  '));
 };
 
-const out = new URL('../public/audio/', import.meta.url).pathname;
-mkdirSync(out, {recursive: true});
-render(PROMO, MUSIC.promo, MUSIC.promoHit, out + 'promo.wav');
-render(VERTICAL, MUSIC.vertical, MUSIC.verticalHit, out + 'vertical.wav');
+/** The loudnorm master (second pass, linear) used by every film: raw wav in, mastered 16-bit wav out. */
+export const master = (tmp: string, file: string) => {
+  const m1 = measure(tmp);
+  const ln = `loudnorm=I=${LUFS}:TP=${TP}:LRA=11:measured_I=${m1.input_i}:measured_TP=${m1.input_tp}:measured_LRA=${m1.input_lra}:measured_thresh=${m1.input_thresh}:offset=${m1.target_offset}:linear=true`;
+  const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', tmp, '-af', `${ln},aresample=${SR}`, '-c:a', 'pcm_s16le', '-ar', String(SR), file]);
+  if (r.status !== 0) throw new Error(`ffmpeg master failed: ${r.stderr}`);
+  unlinkSync(tmp);
+  return measure(file);
+};
+
+// render the v4 films only when run as the main script (v7_synth.mts imports this file)
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const out = new URL('../public/audio/', import.meta.url).pathname;
+  mkdirSync(out, {recursive: true});
+  render(PROMO, MUSIC.promo, MUSIC.promoHit, out + 'promo.wav');
+  render(VERTICAL, MUSIC.vertical, MUSIC.verticalHit, out + 'vertical.wav');
+}

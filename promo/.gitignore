@@ -3,3 +3,4 @@ out/
 public/audio/
 public/music*.wav
 public/blender/*/
+__pycache__/

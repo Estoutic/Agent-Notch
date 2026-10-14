@@ -40,7 +40,8 @@ export const useShot = <K extends ShotId>(id: K) => {
   const p = useContext(ShotCtx);
   const f = useCurrentFrame();
   const {durationInFrames} = useVideoConfig();
-  const b = (beat: number) => (p ? localFrame(p, beat) : Math.round(beat * 15));
+  const k = (p as {k?: number} | null)?.k ?? 1; // v7 stretches a shot's in-shot beats by k
+  const b = (beat: number) => (p ? localFrame(p, beat * k) : Math.round(beat * 15));
   const evs = EV[id] as Record<string, number>;
   const ev = Object.fromEntries(Object.entries(evs).map(([k, v]) => [k, b(v)])) as {[P in keyof (typeof EV)[K]]: number};
   const len = p ? p.to - p.from : durationInFrames;

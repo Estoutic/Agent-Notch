@@ -6,7 +6,7 @@ import {Backdrop, C, Cursor, Grain, Ripple, Vignette, cursorPath, easeIO, expoOu
 import {THEME_BEATS, THEME_ORDER} from '../timeline';
 import {Caption} from './common';
 
-const THEME_NAMES: Record<(typeof THEME_ORDER)[number], string> = {
+export const THEME_NAMES: Record<(typeof THEME_ORDER)[number], string> = {
   terminal: 'Terminal', glass: 'Liquid Glass', paper: 'Paper', midnight: 'Midnight', console: 'Console', phosphor: 'Phosphor', synthwave: 'Synthwave',
   blueprint: 'Blueprint', brutal: 'Brutalism', hologram: 'Hologram', wasteland: 'Wasteland', pixel: 'Pixel', ducks: 'Rubber Ducks',
 };

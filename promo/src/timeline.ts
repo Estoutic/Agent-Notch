@@ -180,7 +180,7 @@ export type Sfx = 'whoosh' | 'impact' | 'boom' | 'click' | 'dclick' | 'key' | 't
 /** b: beat inside the shot; d: duration in beats (whoosh, riser, type); v: gain; p: pitch factor. */
 export type Cue = {b: number; s: Sfx; d?: number; v?: number; p?: number};
 
-const SHOT_CUES: Record<ShotId, Cue[]> = {
+export const SHOT_CUES: Record<ShotId, Cue[]> = {
   cascade: [
     {b: 0, s: 'thud', v: 0.8}, {b: EV.cascade.cut2, s: 'thud', v: 0.9}, {b: EV.cascade.cut3, s: 'thud', v: 1},
     ...Array.from({length: 12}, (_, i) => ({b: 0.15 + i * 0.3, s: 'pop' as Sfx, v: 0.3, p: 0.8 + (i % 5) * 0.08})),

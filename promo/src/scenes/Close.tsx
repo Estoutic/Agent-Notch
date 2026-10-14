@@ -128,7 +128,7 @@ export const Local: React.FC = () => {
 };
 
 /* ---------- end: the agent we followed, working; name, install, free ---------- */
-const INSTALL = 'brew install --cask forichok/tap/agent-notch';
+export const INSTALL = 'brew install --cask forichok/tap/agent-notch';
 export const End: React.FC = () => {
   const {f, ev, len} = useShot('end');
   const {W, H, V} = useV();

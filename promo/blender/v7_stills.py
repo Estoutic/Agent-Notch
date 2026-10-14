@@ -343,4 +343,5 @@ def main():
         fh.write(json.dumps(times) + "\n")
 
 
-main()
+if __name__ == "__main__":
+    main()
