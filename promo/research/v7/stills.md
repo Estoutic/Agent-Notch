@@ -42,3 +42,8 @@ Renders land in `blender/cache/v7/stills/` and `out/v7-stills/`; neither is comm
 
 Captions are drafts in Geist for the look of the 2D layer only. Lines 1 and 3 are v4/v5 copy; line 2
 ("55 agents. 11 projects. / One notch keeps count.") is new and needs the owner's yes.
+
+## Owner round 6-4200d3
+
+All yes: still 1 (request), still 2 (swarm), still 3 (night); the swarm line "55 agents. 11 projects. / One notch keeps
+count." as written; go to the animatic in this style. No notes.
