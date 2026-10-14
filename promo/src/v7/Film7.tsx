@@ -175,7 +175,7 @@ const End: React.FC = () => {
   return (
     <>
       <AbsoluteFill style={{background: 'linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.35) 55%, transparent 75%)'}} />
-      <div style={{position: 'absolute', left: 0, right: 0, top: 140, display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'scale(0.82)', transformOrigin: '50% 0'}}>
+      <div style={{position: 'absolute', left: 0, right: 0, top: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'scale(0.82)', transformOrigin: '50% 0'}}>
         <div style={{display: 'flex', alignItems: 'center', gap: 34, opacity: nameIn, transform: `translateY(${(1 - nameIn) * 24}px) scale(${1 + 0.035 * hit})`,
           filter: hit > 0.02 ? `drop-shadow(0 0 ${40 * hit}px rgba(255,255,255,${0.5 * hit}))` : undefined}}>
           <Img src={icon} style={{width: 128, height: 128, borderRadius: 29}} />

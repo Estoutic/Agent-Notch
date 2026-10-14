@@ -471,13 +471,14 @@ def shot_risky(S):
 
     def frame(lf):
         on = ss(-HANDLE, 6, lf) * (1 - ss(ev["deny"] + 2, ev["deny"] + 14, lf))
-        hot = ss(ev["deny"] - 3, ev["deny"], lf) * (1 - ss(ev["deny"] + 3, ev["deny"] + 8, lf))
+        hot = ss(ev["deny"] - 3, ev["deny"], lf) * (1 - ss(ev["deny"], ev["deny"] + 2, lf))
+        row_on = on * (1 - ss(ev["deny"], ev["deny"] + 2, lf))  # the row glow goes with the panel
         deny.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.6 * hot
         pulse = 0.85 + 0.15 * math.sin(lf / 30 * 2 * math.pi * 1.0)
-        red.data.energy = 40.0 * on * pulse
+        red.data.energy = 40.0 * on * pulse * (1 - ss(ev["deny"], ev["deny"] + 2, lf))
         red_low.data.energy = 55.0 * on * pulse
         scr.show("ask" if lf < ev["deny"] + 2 else "sub", 1.0 - 0.25 * on)
-        tint.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.22 * on * pulse
+        tint.data.materials[0].node_tree.nodes["Emission"].inputs["Strength"].default_value = 0.22 * row_on * pulse
         push = ease(ss(-HANDLE, ev["tryKey"] + 10, lf), 2.0)
         m = ease(ss(ev["move"] - 6, ev["move"] + 24, lf), 3.0)
         wide = ease(ss(ev["deny"] + 4, ev["deny"] + 34, lf), 3.0)
@@ -530,7 +531,7 @@ def shot_night(S):
         gapk = 1 - ss(3, 12, a)
         out = 1 - ss(ev["shut"] + 2, ev["out"] + 6, lf)
         opening = ss(ev["open"], ev["open"] + 10, lf)
-        k = gapk * (max(out, 0.22) if lf < ev["open"] else 0.0) + opening * (1 - ss(14, 34, a)) * 0.8
+        k = gapk * (max(out, 0.45) if lf < ev["open"] else 0.0) + opening * (1 - ss(14, 34, a)) * 0.8
         leak.data.energy = 0.04 * k
         line_k.inputs[1].default_value = 3.0 * k
         line.scale = (1.0, max(0.05, lerp(0.35, 1.0, out)), 1.0)
@@ -591,6 +592,8 @@ def shot_themes(S):
 def shot_end(S):
     """One slow orbit of the laptop on the desk; the type sits above it in 2D."""
     sc, cam, hinge = scene("one", screen=1.6, studio=False, samples=S)
+    sc.view_settings.exposure += 0.6
+    area_light("EndSoft", Vector((0.0, 0.15, 1.0)), Vector((0, -0.05, 0.0)), 30.0, (1.0, 0.97, 0.93), 1.2, 0.8)  # broad, no floor spot
     scr = Screen(["one"])
     n = PLAN["shots"]["end"]["len"]
 
