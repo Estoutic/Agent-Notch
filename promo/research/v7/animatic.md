@@ -182,3 +182,12 @@ Known issue: the fly-through lands on trust's first frame, which has no text yet
 - **Silence on the lid close (bug).** The MP4 dropped to −42 dB at 48.3–49.4 s, the deliberate 98.5–101 music hole. The track now runs on to beat 101. From the latch it is low-passed at 650 Hz, as if heard through the closed lid, and it opens back up over one beat as the lid swings open. The join to track 68 sits inside the muffle. The old −4 dB night dip is gone. Measured on the MP4: −13 to −15 dB through 47.5–55 s, −14.0 LUFS and −1.5 dBTP overall.
 - **Lid close.** Low at the front edge. The lid closes slowly to about 12°, then snaps shut on the latch, and the light from the gap narrows to a line across the frame. From there the camera cranes up to the ghosts.
 - **Lid open.** Three-quarter front from the sun side. The seam lights first and the lid cracks open about 2.5°, then swings up fast (expo-out, 12 frames). The screen wakes on a dawn wallpaper (`dawn_wallpaper` in make_v7_faces.py), with a whoosh, a boom and a sub under it. The camera then rises to face the screen.
+
+## Max-quality plates (PC render)
+
+The owner rendered all 11 plates on their PC (RTX 4080) from the offload bundle: 1920×1080, 128 samples, `--quality max`. That is 1276 frames in 65 min at 1.8–3.5 s/frame. Every shot has the planned frame count, and every PNG decodes.
+
+`out/agent-notch-v7-max.mp4` is built from the same timeline and audio as the animatic: 71.85 s, 2154 frames, −14.0 LUFS, −1.5 dBTP, and `qc.sh` exits 0. The screen text, keys and speaker grille are sharp now, and the glow on the deck no longer clips (`out/v7-max-vs-preview.png`). The preview plates are kept in `public/blender/v7-preview`.
+
+- The cascade (0–2 s) is a little darker than the preview, so blackdetect now flags it. Those frames are dark by design.
+- Still open: the 0.27 s of dark frames at 54.0 s, on the night → trust fly-through.
