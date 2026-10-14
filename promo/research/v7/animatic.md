@@ -23,7 +23,7 @@ Sync, measured on the MP4 with `ffmpeg -ss <t> -t <d> -i … -vn -af astats -f n
 
 `blender/v7_plates.py`, half size (960×540), 16 samples, HANDLE = 12 extra frames before each shot.
 First full pass: 1376 frames in 498 s, 0.19–0.43 s/frame (0.36 average). Re-renders after the first look and the two
-review rounds: 1257 frames in 1083 s across 15 shot renders. Plate time in total ≈ 26 min.
+review rounds: 2179 frames in 805 s across 16 shot renders. Plate time in total 1303 s ≈ 22 min.
 
 | Shot | Frames | s/frame (last render) |
 |---|---|---|
