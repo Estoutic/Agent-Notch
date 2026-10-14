@@ -191,3 +191,27 @@ The owner rendered all 11 plates on their PC (RTX 4080) from the offload bundle:
 
 - The cascade (0–2 s) is a little darker than the preview, so blackdetect now flags it. Those frames are dark by design.
 - Still open: the 0.27 s of dark frames at 54.0 s, on the night → trust fly-through.
+
+## Owner notes, round 6
+
+> "там новый пр влился нужно добавить это в видос"
+
+PR #13 (prompt vault) gets its own 2D shot, `vault`, 8 beats right after `keys`, in the same terminal:
+
+- ⌃⌥P drops the picker under the notch. ⇥ switches to Skills and back. ⌘2 pastes "Plan first" into Claude's input line.
+- Caption: "⌃⌥P pastes a saved prompt." / "⇥ switches to skills."
+- The picker images are crops of `--snapshot-prompts` from a master build (fc1a6fd) on fixture prompts and skills. That run used a scratch patch, `AGENT_NOTCH_SNAPSHOT_SELECTED=0`, so row 1 is selected as it is when the picker opens. The app resets the selection to row 1 on open and on ⇥, so the paste uses the row hotkey ⌘2 instead of ↩.
+
+Music: there are 8 new beats at film 66, a phrase line. They play track 40–48, which was last heard 24 beats earlier. From film 74 the track continues exactly as round 5 played it from 66, so the breakdown still lands on `risky` (now beat 82).
+
+- New joins: 66 (track 16 → 40) and 74 (track 48 → 16).
+- Everything after beat 60 moves 3.9 s later: the night and the end hit included.
+- The film is now 155 beats, 75.7 s.
+
+3D plates were not re-rendered. The only change is that `risky` picks up one frame from rounding, and that frame holds the plate's last PNG under the card's zoom-in (`PLATE_FRAMES` in Film7).
+
+`out/agent-notch-v7-r6.mp4`: 75.75 s, 2271 frames, −14.0 LUFS, −1.5 dBTP, and `qc.sh` exits 0. The dark stretches are the same as round 5's, shifted 3.9 s later; there are none inside the vault shot (29.4–33.3 s).
+
+Not listened to. The join at 66 (32.6 s) scores the lowest chroma of the film's seams (0.870, against 0.884 and 0.918 for the accepted ones).
+
+Still open from round 4: after ⌃⌥N, the wing in keys and vault still shows Codex as waiting.

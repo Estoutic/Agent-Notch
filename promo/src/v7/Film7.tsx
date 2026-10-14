@@ -15,14 +15,14 @@ import {THEME_NAMES} from '../scenes/Custom';
 import {INSTALL, Local} from '../scenes/Close';
 // states and anatomy keep v4's drawn marks: the real snapshots carry the vendor glyphs, too big to show at that scale
 import {Anatomy, States} from '../scenes/Aware';
-import {CardShot7, Hosts7, Jump7, Keys7, Presets7, Sounds7, TitleCard7, ToastShot7, Trust7, Usage7} from './scenes7';
+import {CardShot7, Hosts7, Jump7, Keys7, Presets7, Sounds7, TitleCard7, ToastShot7, Trust7, Usage7, Vault7} from './scenes7';
 import {Caption} from '../scenes/common';
 import {EV7, HANDLE, LEN7, local7, place7, type Placed7, type Shot7Id} from './timeline7';
 
 loadFonts();
 
 const TWO_D: Partial<Record<Shot7Id, React.FC>> = {
-  freeze: FreezeShot, you: You, title: TitleCard7, states: States, anatomy: Anatomy, usage: Usage7, jump: Jump7, keys: Keys7,
+  freeze: FreezeShot, you: You, title: TitleCard7, states: States, anatomy: Anatomy, usage: Usage7, jump: Jump7, keys: Keys7, vault: Vault7,
   card: CardShot7, toast: ToastShot7, trust: Trust7, sounds: Sounds7, presets: Presets7, hosts: Hosts7, local: Local,
 };
 
@@ -32,9 +32,14 @@ const Shot3DCtx = createContext<Ctx | null>(null);
 const use3D = () => useContext(Shot3DCtx)!;
 
 const pad = (n: number) => String(n).padStart(4, '0');
+/**
+ * Plates were rendered for the round-5 timeline. The 8-beat vault insert (round 6) moved risky onto a different frame
+ * rounding, so it is one frame longer than its plate; its last frame holds the plate's last PNG (under card's zoom-in).
+ */
+const PLATE_FRAMES: Partial<Record<Shot7Id, number>> = {risky: 146};
 const Plate: React.FC = () => {
   const {p, f, len} = use3D();
-  const idx = Math.min(len + HANDLE - 1, Math.max(0, f + HANDLE));
+  const idx = Math.min(Math.min(len, PLATE_FRAMES[p.id] ?? len) + HANDLE - 1, Math.max(0, f + HANDLE));
   return <Img src={staticFile(`blender/v7/${p.id}/${pad(idx)}.png`)} style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover'}} />;
 };
 

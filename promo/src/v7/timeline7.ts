@@ -1,7 +1,8 @@
 /*
  * v7 timeline: v4 remastered (research/v7/plan.md). Same beat grid as v4 (BPM, OFFSET_FRAMES from ../timeline), so the
  * hook (cascade, freeze, you, reveal) keeps v4's exact frames. The middle (anatomy..card) runs about 1.2x its v4 beats,
- * two shots are new (swarm after anatomy, night after toast), 147 beats = 71.8 s.
+ * two shots are new (swarm after anatomy, night after toast), 147 beats = 71.8 s. Round 6 adds the prompt vault after keys:
+ * 155 beats = 75.7 s.
  *
  * 2D shots reuse the v4 scenes; `k` stretches their in-shot events (useShot multiplies every beat by k).
  * 3D shots play EEVEE plates from public/blender/v7/<shot>/ (blender/v7_plates.py), rendered with HANDLE extra frames
@@ -12,7 +13,7 @@
 import {FPS, FPB, OFFSET_FRAMES, beatFrame, SHOT_CUES, EV, THEME_BEATS, type Cue, type Sfx, type ShotId, type MusicSeg} from '../timeline.ts';
 
 export {FPS, FPB, OFFSET_FRAMES, beatFrame};
-export type Shot7Id = ShotId | 'swarm' | 'night';
+export type Shot7Id = ShotId | 'swarm' | 'night' | 'vault';
 export type Kind = '2d' | '3d';
 /** How the shot comes in: cut, or a dissolve/match of `x` frames over the end of the previous shot. */
 export type Trans = {type: 'cut'} | {type: 'dissolve' | 'zoom' | 'flash' | 'light' | 'through'; x: number; note: string};
@@ -36,7 +37,8 @@ export const V7: Shot7[] = [
   {id: 'usage', beats: 5, kind: '2d', k: 1.25, in: {type: 'dissolve', x: 3, note: 'the panel row becomes the usage card'}},
   {id: 'jump', beats: 4, kind: '2d', in: CUT},
   {id: 'keys', beats: 6, kind: '2d', in: CUT}, // jump ends in a whip; the music jumps back to groove 2 on this cut
-  {id: 'question', beats: 6, kind: '3d', in: {type: 'zoom', x: 4, note: 'the pressed key becomes the next panel button'}},
+  {id: 'vault', beats: 8, kind: '2d', in: CUT}, // owner, round 6 (PR #13): same terminal, the third hotkey opens the prompts
+  {id: 'question', beats: 6, kind: '3d', in: {type: 'zoom', x: 4, note: 'the pasted prompt line becomes the next panel'}},
   {id: 'plan', beats: 8, kind: '3d', in: {type: 'dissolve', x: 3, note: 'answered question -> the plan on the same panel'}},
   {id: 'risky', beats: 10, kind: '3d', in: CUT}, // cut on the breakdown: everything goes dark, the red row lights the desk
   {id: 'card', beats: 11, kind: '2d', k: 11 / 9, in: {type: 'zoom', x: 4, note: 'the red row becomes the Deny chip, then the card'}},
@@ -71,25 +73,31 @@ export const local7 = (p: Placed7, beat: number) => beatFrame(p.startBeat + beat
  * 68 = 37.38925 s (+264.00 ms). Strongest nearby hits can be sixteenth notes, so the tracked bar phase wins.
  *   0-8       intro; 8-10 dead stop; measured drop attack lands at film 10.
  *   10-34     track 0-24; 34-50 track 32-48 (skip the first breakdown).
- *   50-98.5   track 0 onward: a full 0-24 section returns after 16 intervening beats; 32-48 returns after 32.
- *             The natural 24-32 breakdown plays at 74-82; there is no edit at its entrance or recovery.
- *   50-101    the track runs on under the lid close (owner, round 5: no silence there); the join to track 68 at 101
- *             sits inside the muffle (NIGHT_MUSIC), so it is not heard as a cut.
- *   101-147   fresh track 68 onward, without a night-time loop.
- *             The measured final attack at 55.07565 s lands at 138.8; the track's decay runs through 147.
+ *   50-66     track 0-16.
+ *   66-74     track 40-48 (round 6, the vault shot needs 8 more beats; the insert sits on a phrase line). Track 40-48
+ *             last played at film 42-50, 24 beats earlier.
+ *   74-109    track 16 onward, exactly as round 5 played it from film 66: the 24-32 breakdown still lands on risky (82),
+ *             and the track runs on under the lid close; the join to track 68 at 109 sits inside the muffle.
+ *   109-155   fresh track 68 onward, without a night-time loop.
+ *             The measured final attack at 55.07565 s lands at 146.8; the track's decay runs through 155.
  * Artificial seams: film 34, track 24->32: mel cosine 0.9814, chroma 0.9716, RMS +0.65 dB;
  *                   film 50, track 48->0: mel cosine 0.9740, chroma 0.9650, RMS -0.40 dB (one beat each side).
+ * Round 6 seams, measured with a coarser mean-spectrum method (the two seams above score 0.921/0.884 and 0.938/0.918
+ * on it): film 66, track 16->40: mel 0.926, chroma 0.870, RMS -0.09 dB; film 74, track 48->16: mel 0.914, chroma 0.934,
+ * RMS -0.03 dB.
  * Renderer: 40 ms complementary crossfades; waveform alignment removes atempo's attack shift.
  */
 export const MUSIC7: (MusicSeg & {rate?: number})[] = [
   {from: 0, to: 8, src: -8.081064603175, rate: 1.011814200680},
   {from: 10, to: 34, src: 0.013449002268, rate: 1.007907851474},
   {from: 34, to: 50, src: 32.261384792139, rate: 1.007948542611},
-  {from: 50, to: 101, src: 0.013449002268, rate: 1.007907851474},
-  {from: 101, to: 147, src: 68.541417029478, rate: 0.959572685335},
+  {from: 50, to: 66, src: 0.013449002268, rate: 1.007907851474},
+  {from: 66, to: 74, src: 40.324973133027, rate: 1.007948542611}, // track 40-48 as film 42-50 played it (32.2614 + 8 x rate)
+  {from: 74, to: 109, src: 16.139974625852, rate: 1.007907851474}, // track 16 onward as film 66 played it (0.01345 + 16 x rate)
+  {from: 109, to: 155, src: 68.541417029478, rate: 0.959572685335},
 ];
 export const HIT7 = undefined; // the track's own final hit, measured at 55.07565 s; no synth hit
-export const HIT7_BEAT = 138.8;
+export const HIT7_BEAT = 146.8;
 
 /* ---------- events of the 3D shots and new shots, in beats from the shot start ---------- */
 export const EV7 = {
@@ -100,12 +108,13 @@ export const EV7 = {
   open: EV.open,
   keys: {y: 1.5, n: 3.75},
   card: {done: 0.6, remaining: 2.75, files: 4.9, log: 7.05, prompts: 9.2},
+  vault: {open: 1, tab: 2.75, back: 4.25, paste: 5.5},
   question: {pick: 3.5, resume: 4.25},
   plan: {approve: 6},
   risky: {tryKey: 1.75, move: 4, deny: 6.75},
   night: {shut: 1.5, out: 2.25, dawn: 7.6, open: 8.1},
   themes: {first: 0},
-  end: {hit: HIT7_BEAT - 137, install: 2.6, url: 4.0},
+  end: {hit: HIT7_BEAT - 145, install: 2.6, url: 4.0},
 } as const;
 
 /* ---------- sound ---------- */
@@ -127,6 +136,12 @@ const CUES7: Partial<Record<Shot7Id, Cue7[]>> = {
   open: [{b: 0, s: 'whoosh', d: 0.6, v: 0.4}, ...SHOT_CUES.open],
   card: [{b: 0, s: 'whoosh', d: 0.4, v: 0.6}, ...(['done', 'remaining', 'files', 'log', 'prompts'] as const).map((t) => ({b: EV7.card[t], s: 'click' as Sfx7, v: 0.7}))],
   keys: [{b: 0, s: 'sub', v: 0.7}, ...keyCombo(EV7.keys.y, true), ...keyCombo(EV7.keys.n, false)],
+  vault: [
+    {b: EV7.vault.open - 0.2, s: 'keyclick', v: 0.8}, {b: EV7.vault.open - 0.1, s: 'keyclick', v: 0.8}, {b: EV7.vault.open, s: 'keyclick'},
+    {b: EV7.vault.open, s: 'whoosh', d: 0.4, v: 0.35},
+    ...[EV7.vault.tab, EV7.vault.back].flatMap((b) => [{b, s: 'keyclick' as Sfx7}, {b, s: 'tick' as Sfx7, v: 0.45}]),
+    {b: EV7.vault.paste - 0.1, s: 'keyclick', v: 0.8}, {b: EV7.vault.paste, s: 'keyclick'}, {b: EV7.vault.paste + 0.05, s: 'approve', v: 0.6}, // ⌘2
+  ],
   question: [{b: 0, s: 'whoosh', d: 0.5, v: 0.4}, {b: EV7.question.pick, s: 'click'}, {b: EV7.question.pick + 0.05, s: 'approve', v: 0.8}],
   plan: [{b: 1.5, s: 'type', d: 1.5, v: 0.35}, {b: EV7.plan.approve, s: 'click'}, {b: EV7.plan.approve + 0.05, s: 'approve'}],
   risky: [{b: 0, s: 'sub', v: 0.9}, {b: 0, s: 'buzz', v: 0.7}, ...keyCombo(EV7.risky.tryKey, false).slice(0, 3), {b: EV7.risky.deny, s: 'click'}, {b: EV7.risky.deny + 0.05, s: 'deny'}],
@@ -159,7 +174,8 @@ export const cues7 = (shots: Shot7[] = V7): AbsCue[] => {
 /** Room tone: day under the whole film, night under the night shot (the synth crossfades them). */
 export const ROOM7 = (() => {
   const n = place7().find((p) => p.id === 'night')!;
-  return {nightFrom: n.from + local7(n, EV7.night.out), nightTo: n.from + local7(n, EV7.night.dawn), silenceFrom: beatFrame(98.5), silenceTo: beatFrame(101)};
+  return {nightFrom: n.from + local7(n, EV7.night.out), nightTo: n.from + local7(n, EV7.night.dawn),
+    silenceFrom: beatFrame(n.startBeat - 0.5), silenceTo: beatFrame(n.startBeat + 2)};
 })();
 
 /**
