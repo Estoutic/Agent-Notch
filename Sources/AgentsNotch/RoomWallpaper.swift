@@ -58,7 +58,8 @@ final class RoomWallpaper: NSObject {
         web.navigationDelegate = self
         if #available(macOS 13.3, *) { web.isInspectable = true }
         var url = URLComponents(url: page, resolvingAgainstBaseURL: false)
-        url?.queryItems = [URLQueryItem(name: "nodemo", value: "1")]
+        // gl=1: the page draws through WebGL, about half the CPU of the 2D canvas (docs/research/native-wallpaper.md)
+        url?.queryItems = [URLQueryItem(name: "nodemo", value: "1"), URLQueryItem(name: "gl", value: "1")]
         web.loadFileURL(url?.url ?? page, allowingReadAccessTo: page.deletingLastPathComponent())
         w.contentView = web
         w.setFrame(screen.frame, display: true)

@@ -77,7 +77,7 @@ final class RoomExtraScreen: NSObject, WKNavigationDelegate {
         super.init()
         web.navigationDelegate = self
         var url = URLComponents(url: page, resolvingAgainstBaseURL: false)
-        url?.queryItems = [URLQueryItem(name: "nodemo", value: "1"), URLQueryItem(name: "scene", value: "extra")]
+        url?.queryItems = [URLQueryItem(name: "nodemo", value: "1"), URLQueryItem(name: "scene", value: "extra"), URLQueryItem(name: "gl", value: "1")]
         web.loadFileURL(url?.url ?? page, allowingReadAccessTo: page.deletingLastPathComponent())
         w.contentView = web
         w.setFrame(screen.frame, display: true)
