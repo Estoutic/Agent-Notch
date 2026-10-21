@@ -48,7 +48,7 @@
 
 const Q = new URLSearchParams(location.search);
 const PV = window.ROOM_PREVIEW || null;
-const cv = document.getElementById('c'), main = cv.getContext('2d');
+const cv = document.getElementById('c'), main = (Q.get('gl') === '1' && glContext(cv)) || cv.getContext('2d');
 const tip = document.getElementById('tip');
 let g = main; // drawing target: the screen, or an offscreen cache while baking
 
@@ -3757,6 +3757,7 @@ function frame(t) {
   drawSceneOverlays(t);
   drawMist(t, d);
   eggOver(t);
+  if (main.flush) main.flush();
   updateTip(); updateControls(d);
 }
 
@@ -5002,6 +5003,250 @@ function bdInstall() {
   R0.pointer = (x, y) => { pointer0(x, y); if (PK.open) pickHover(x, y); };
   R0.backdropList = () => bdList(); // [{id, name}] in the picker's order, for the app's settings
   R0.closeWallpapers = closePicker;
+}
+
+// ---------- WebGL screen (?gl=1): the same calls, drawn in a few batches ----------
+// WebKit replays every 2D canvas call in its GPU process, and a busy frame makes ~7k of them: that replay, not the
+// pixels, is what the wallpaper costs (docs/research/native-wallpaper.md). This object answers the part of the 2D
+// context the page uses on the screen canvas. A frame's fills and images become instances of one quad, uploaded once
+// at the end of the frame and drawn in runs that share a texture and a blend mode; two-stop gradients are computed in
+// the shader; clips and path fills go through the stencil buffer. Offscreen canvases (bakes, backdrops) stay 2D and
+// become textures, uploaded again only after something drew on them.
+function glContext(cv) {
+  const gl = cv.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: true, depth: false, stencil: true, preserveDrawingBuffer: false });
+  if (!gl) return null;
+  const C2 = CanvasRenderingContext2D.prototype;
+  for (const k of ['fillRect', 'clearRect', 'strokeRect', 'fill', 'stroke', 'drawImage', 'putImageData', 'fillText', 'strokeText']) {
+    const f = C2[k]; C2[k] = function (...a) { const c = this.canvas; c.__v = (c.__v | 0) + 1; return f.apply(this, a); };
+  }
+  for (const k of ['width', 'height']) {
+    const d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, k);
+    Object.defineProperty(HTMLCanvasElement.prototype, k, { get: d.get, set(v) { this.__v = (this.__v | 0) + 1; d.set.call(this, v); }, configurable: true });
+  }
+
+  const program = (vs, fs) => {
+    const p = gl.createProgram();
+    for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); gl.attachShader(p, s); }
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { console.error('gl:', gl.getProgramInfoLog(p)); return null; }
+    return p;
+  };
+  // a quad per instance: dst rect, then uv (or, for a gradient, its two stop offsets, a mode and the alpha),
+  // a colour (premultiplied; for a gradient the first stop, straight), the second stop, the gradient's geometry
+  const quads = program(`#version 300 es
+    layout(location=0) in vec4 dst; layout(location=1) in vec4 uv; layout(location=2) in vec4 col; layout(location=3) in vec4 col2; layout(location=4) in vec4 gp;
+    uniform vec2 size; out highp vec2 vpos; out highp vec4 vuv; out vec4 vcol; out vec4 vcol2; out highp vec4 vgp; flat out int mode;
+    void main() { vec2 c = vec2(gl_VertexID & 1, gl_VertexID >> 1), p = dst.xy + c * dst.zw;
+      gl_Position = vec4(p.x / size.x * 2. - 1., 1. - p.y / size.y * 2., 0, 1); vpos = p;
+      mode = uv.z >= 0. ? 0 : uv.z > -1.5 ? 1 : uv.z > -2.5 ? 2 : 3;
+      vuv = mode == 0 ? vec4(uv.xy + c * uv.zw, 0, 0) : uv; vcol = col; vcol2 = col2; vgp = gp; }`, `#version 300 es
+    precision highp float; uniform sampler2D t; in vec2 vpos; in vec4 vuv; in vec4 vcol; in vec4 vcol2; in vec4 vgp; flat in int mode; out vec4 o;
+    void main() {
+      if (mode == 0) { o = texture(t, vuv.xy) * vcol; return; }
+      if (mode == 1) { o = vcol; return; }
+      float k; if (mode == 2) { vec2 d = vgp.zw - vgp.xy; k = dot(vpos - vgp.xy, d) / dot(d, d); } else k = (length(vpos - vgp.xy) - vgp.z) / (vgp.w - vgp.z);
+      k = clamp((k - vuv.x) / max(vuv.y - vuv.x, 1e-6), 0., 1.);
+      vec4 c = mix(vcol, vcol2, k); o = vec4(c.rgb * c.a, c.a) * vuv.w; }`);
+  const polys = program(`#version 300 es
+    layout(location=0) in vec2 p; uniform vec2 size;
+    void main() { gl_Position = vec4(p.x / size.x * 2. - 1., 1. - p.y / size.y * 2., 0, 1); }`, `#version 300 es
+    precision mediump float; out vec4 o; void main() { o = vec4(0); }`);
+  if (!quads || !polys) return null;
+  const uSize = gl.getUniformLocation(quads, 'size'), uSizeP = gl.getUniformLocation(polys, 'size');
+  const F = 20, CAP = 32768, data = new Float32Array(CAP * F), vbo = gl.createBuffer(), pbo = gl.createBuffer();
+  const qvao = gl.createVertexArray(), pvao = gl.createVertexArray();
+  gl.bindVertexArray(qvao); gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  for (let i = 0; i < 5; i++) { gl.enableVertexAttribArray(i); gl.vertexAttribDivisor(i, 1); }
+  gl.bindVertexArray(pvao); gl.bindBuffer(gl.ARRAY_BUFFER, pbo); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.enable(gl.BLEND); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  const BLEND = {
+    'source-over': [gl.ONE, gl.ONE_MINUS_SRC_ALPHA], lighter: [gl.ONE, gl.ONE], multiply: [gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA],
+    'destination-in': [gl.ZERO, gl.SRC_ALPHA], 'destination-out': [gl.ZERO, gl.ONE_MINUS_SRC_ALPHA], clear: [gl.ZERO, gl.ZERO],
+  };
+  const newTex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
+
+  // ----- the frame: instances in one array, runs of them and stencil changes in order -----
+  const stat = { draws: 0, uploads: 0, upPx: 0, flushes: 0, gradTex: 0 }; // counted for tuning: main.stat in the console
+  let n = 0, ops = [], used = new Set(), lastClips = null;
+  function flush() {
+    if (!ops.length) return;
+    stat.flushes++;
+    const w = cv.width, h = cv.height;
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(quads); gl.uniform2f(uSize, w, h); gl.bindVertexArray(qvao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo); gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n * F), gl.STREAM_DRAW);
+    let blend = '', depth = -1, tex = null;
+    for (const op of ops) {
+      if (op.clips) { stencil(op.clips, w, h); depth = -1; continue; }
+      if (!op.count) continue;
+      if (op.blend !== blend) { blend = op.blend; gl.blendFunc(BLEND[blend][0], BLEND[blend][1]); }
+      if (op.depth !== depth) { depth = op.depth;
+        if (depth) { gl.enable(gl.STENCIL_TEST); gl.stencilFunc(gl.EQUAL, depth, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP); } else gl.disable(gl.STENCIL_TEST); }
+      if (op.tex && op.tex !== tex) { tex = op.tex; gl.bindTexture(gl.TEXTURE_2D, tex); }
+      const o = op.start * F * 4;
+      for (let i = 0; i < 5; i++) gl.vertexAttribPointer(i, 4, gl.FLOAT, false, F * 4, o + i * 16);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, op.count); stat.draws++;
+    }
+    gl.disable(gl.STENCIL_TEST);
+    n = 0; ops = []; used.clear(); lastClips = null; run = null;
+  }
+  // the stencil holds how many of the current clips cover a pixel; drawing tests for all of them
+  function stencil(clips, w, h) {
+    gl.disable(gl.STENCIL_TEST); gl.stencilMask(0xff); gl.clearStencil(0); gl.clear(gl.STENCIL_BUFFER_BIT);
+    if (clips.length) {
+      gl.useProgram(polys); gl.uniform2f(uSizeP, w, h); gl.bindVertexArray(pvao); gl.bindBuffer(gl.ARRAY_BUFFER, pbo);
+      gl.enable(gl.STENCIL_TEST); gl.colorMask(false, false, false, false);
+      clips.forEach((pts, i) => {
+        gl.stencilFunc(gl.EQUAL, i, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
+        gl.bufferData(gl.ARRAY_BUFFER, pts, gl.STREAM_DRAW); gl.drawArrays(gl.TRIANGLE_FAN, 0, pts.length / 2);
+      });
+      gl.colorMask(true, true, true, true); gl.disable(gl.STENCIL_TEST);
+      gl.useProgram(quads); gl.bindVertexArray(qvao); gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    }
+  }
+  // the slot for one more instance; a new run starts when the blend mode, the clip or (for images) the texture changes
+  let run = null;
+  function slot(blend, t) {
+    if (n === CAP) flush();
+    if (st.clips !== lastClips) { ops.push({ clips: st.clips }); lastClips = st.clips; run = null; }
+    const depth = st.clips.length;
+    if (!run || run.blend !== blend || run.depth !== depth || (t && run.tex && run.tex !== t)) { run = { start: n, count: 0, blend, depth, tex: t }; ops.push(run); }
+    else if (t && !run.tex) run.tex = t;
+    if (t) used.add(t);
+    run.count++;
+    return n++ * F;
+  }
+  // the shader reads only what its mode needs, so a fill writes 9 floats and an image 12
+  function solid(blend, x, y, w, h, r, g, b, a) {
+    const o = slot(blend, null);
+    data[o] = x; data[o + 1] = y; data[o + 2] = w; data[o + 3] = h; data[o + 6] = -1;
+    data[o + 8] = r; data[o + 9] = g; data[o + 10] = b; data[o + 11] = a;
+  }
+  function image(blend, t, x, y, w, h, u0, u1, u2, u3, a) {
+    const o = slot(blend, t);
+    data[o] = x; data[o + 1] = y; data[o + 2] = w; data[o + 3] = h; data[o + 4] = u0; data[o + 5] = u1; data[o + 6] = u2; data[o + 7] = u3;
+    data[o + 8] = a; data[o + 9] = a; data[o + 10] = a; data[o + 11] = a;
+  }
+  function gradient(blend, x, y, w, h, o0, o1, mode, a, c0, c1, g) {
+    const o = slot(blend, null);
+    data[o] = x; data[o + 1] = y; data[o + 2] = w; data[o + 3] = h; data[o + 4] = o0; data[o + 5] = o1; data[o + 6] = mode; data[o + 7] = a;
+    data.set(c0, o + 8); data.set(c1, o + 12); data[o + 16] = g[0]; data[o + 17] = g[1]; data[o + 18] = g[2]; data[o + 19] = g[3];
+  }
+  const blendOf = op => BLEND[op] ? op : 'source-over';
+
+  // ----- colours: parsed once -----
+  const COL = new Map(), probe = document.createElement('canvas').getContext('2d');
+  function color(s) {
+    let c = COL.get(s); if (c) return c;
+    let m;
+    if (s[0] === '#' && (s.length === 7 || s.length === 9)) { const v = parseInt(s.slice(1, 7), 16); c = [(v >> 16) / 255, (v >> 8 & 255) / 255, (v & 255) / 255, s.length === 9 ? parseInt(s.slice(7), 16) / 255 : 1]; }
+    else if (s[0] === '#' && (s.length === 4 || s.length === 5)) { const h = i => parseInt(s[i] + s[i], 16) / 255; c = [h(1), h(2), h(3), s.length === 5 ? h(4) : 1]; }
+    else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/.exec(s))) {
+      const a = m[4] === undefined ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : +m[4];
+      c = [Math.min(255, +m[1]) / 255, Math.min(255, +m[2]) / 255, Math.min(255, +m[3]) / 255, Math.max(0, Math.min(1, a))];
+    } else { probe.fillStyle = '#000'; probe.fillStyle = s; const p = probe.fillStyle; c = p === s ? [0, 0, 0, 1] : color(p); }
+    if (COL.size > 8000) COL.clear(); // per-frame alphas make new strings; keep the map small
+    COL.set(s, c); return c;
+  }
+
+  // ----- images: one texture per source -----
+  const TEX = new WeakMap(), gone = new FinalizationRegistry(t => gl.deleteTexture(t));
+  function texOf(img) {
+    const w = img.width, h = img.height; if (!w || !h || (img instanceof HTMLImageElement && !img.complete)) return null;
+    let e = TEX.get(img); const v = img.__v | 0;
+    if (e && e.v === v && e.w === w && e.h === h) return e;
+    if (!e) { e = { t: newTex() }; TEX.set(img, e); gone.register(img, e.t); }
+    else if (used.has(e.t)) flush(); // this frame already drew the old picture
+    gl.bindTexture(gl.TEXTURE_2D, e.t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    stat.uploads++; stat.upPx += w * h;
+    e.v = v; e.w = w; e.h = h; return e;
+  }
+
+  // ----- gradients: two stops in the shader; anything else painted once into a texture -----
+  class Grad { constructor(type, args) { this.type = type; this.args = args; this.stops = []; } addColorStop(o, c) { this.stops.push(o, c); } }
+  const GRAD = new Map();
+  function gradTex(gr, x, y, w, h) {
+    const a = gr.args.map((v, i) => gr.type === 'l' ? v - (i % 2 ? y : x) : i === 2 || i === 5 ? v : v - (i % 3 === 1 ? y : x));
+    const key = gr.type + a.join() + '|' + w + ',' + h + '|' + gr.stops.join();
+    let e = GRAD.get(key);
+    if (e) { GRAD.delete(key); GRAD.set(key, e); return e; }
+    stat.gradTex++;
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h));
+    const x2 = c.getContext('2d'), real = gr.type === 'l' ? x2.createLinearGradient(...a) : x2.createRadialGradient(...a);
+    for (let i = 0; i < gr.stops.length; i += 2) real.addColorStop(gr.stops[i], gr.stops[i + 1]);
+    x2.fillStyle = real; x2.fillRect(0, 0, w, h);
+    e = { c }; GRAD.set(key, e);
+    if (GRAD.size > 48) GRAD.delete(GRAD.keys().next().value);
+    return e;
+  }
+  function fillArea(x, y, w, h) { // the current fill style over a rect, inside the current clips
+    const fs = st.fs, blend = blendOf(st.op);
+    if (fs instanceof Grad) {
+      const A = fs.args, s = fs.stops;
+      if (s.length === 4 && (fs.type === 'l' || (A[0] === A[3] && A[1] === A[4] && A[5] > A[2]))) {
+        const c0 = color(s[1]), c1 = color(s[3]), mode = fs.type === 'l' ? -2 : -3;
+        const g = fs.type === 'l' ? A : [A[0], A[1], A[2], A[5]];
+        gradient(blend, x, y, w, h, s[0], s[2], mode, st.a, c0, c1, g);
+        return;
+      }
+      if (!s.length) return;
+      const e = texOf(gradTex(fs, x, y, w, h).c); if (e) image(blend, e.t, x, y, w, h, 0, 0, w / e.w, h / e.h, st.a);
+      return;
+    }
+    const c = st.c || [0, 0, 0, 1], a = c[3] * st.a;
+    solid(blend, x, y, w, h, c[0] * a, c[1] * a, c[2] * a, a);
+  }
+
+  // ----- paths: only for clips and fills; arcs become polygons -----
+  let path = [];
+  function polyOf(p) {
+    const out = [];
+    for (const s of p) {
+      if (s[0] === 'a') { const [, x, y, r, a0, a1, ccw] = s; let span = ccw ? a0 - a1 : a1 - a0; if (span < 0 || span > 2 * Math.PI) span = 2 * Math.PI;
+        const k = Math.max(8, Math.ceil(r * 2)); for (let i = 0; i <= k; i++) { const a = a0 + (ccw ? -1 : 1) * span * i / k; out.push(x + Math.cos(a) * r, y + Math.sin(a) * r); } }
+      else if (s[0] !== 'z') out.push(s[1], s[2]);
+    }
+    return new Float32Array(out);
+  }
+
+  // ----- the context -----
+  let st = { fs: '#000', c: [0, 0, 0, 1], a: 1, op: 'source-over', clips: [] };
+  const stack = [];
+  return {
+    canvas: cv, imageSmoothingEnabled: false, imageSmoothingQuality: 'low', stat,
+    get fillStyle() { return st.fs; }, set fillStyle(v) { st.fs = v; st.c = typeof v === 'string' ? color(v) : null; },
+    get globalAlpha() { return st.a; }, set globalAlpha(v) { if (v >= 0 && v <= 1) st.a = v; },
+    get globalCompositeOperation() { return st.op; }, set globalCompositeOperation(v) { if (typeof v === 'string') st.op = v; },
+    save() { stack.push(st); st = { ...st }; },
+    restore() { const p = stack.pop(); if (p) st = p; },
+    beginPath() { path = []; }, moveTo(x, y) { path.push(['m', x, y]); }, lineTo(x, y) { path.push(['l', x, y]); },
+    closePath() { path.push(['z']); }, arc(x, y, r, s, e, ccw = false) { path.push(['a', x, y, r, s, e, !!ccw]); },
+    clip() { st.clips = [...st.clips, polyOf(path)]; },
+    createLinearGradient: (...a) => new Grad('l', a), createRadialGradient: (...a) => new Grad('r', a),
+    fill() { // the path is one more clip for a moment; the fill style covers its box
+      const pts = polyOf(path); if (pts.length < 6) return;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = 0; i < pts.length; i += 2) { x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]); y0 = Math.min(y0, pts[i + 1]); y1 = Math.max(y1, pts[i + 1]); }
+      const keep = st.clips; st.clips = [...keep, pts];
+      fillArea(Math.floor(x0), Math.floor(y0), Math.ceil(x1) - Math.floor(x0), Math.ceil(y1) - Math.floor(y0));
+      st.clips = keep;
+    },
+    fillRect(x, y, w, h) {
+      if (w < 0) { x += w; w = -w; } if (h < 0) { y += h; h = -h; }
+      if (w && h) fillArea(x, y, w, h);
+    },
+    clearRect(x, y, w, h) { solid('clear', x, y, w, h, 0, 0, 0, 0); },
+    drawImage(img, ...a) {
+      let sx = 0, sy = 0, sw = img.width, sh = img.height, dx, dy, dw, dh;
+      if (a.length === 2) { [dx, dy] = a; dw = sw; dh = sh; } else if (a.length === 4) [dx, dy, dw, dh] = a; else [sx, sy, sw, sh, dx, dy, dw, dh] = a;
+      if (!sw || !sh || !dw || !dh) return;
+      const e = texOf(img); if (!e) return;
+      image(blendOf(st.op), e.t, dx, dy, dw, dh, sx / e.w, sy / e.h, sw / e.w, sh / e.h, st.a);
+    },
+    flush,
+  };
 }
 
 // ---------- start ----------

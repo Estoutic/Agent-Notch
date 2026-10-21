@@ -83,7 +83,13 @@ final class Meter {
             DispatchQueue.main.asyncAfter(deadline: .now() + SECS) { [self] in finish() }
         }
     }
+    var beforeReport: ((@escaping (String) -> Void) -> Void)?  // e.g. read a result out of the page first
     func finish() {
+        guard let pre = beforeReport else { return report("") }
+        pre { [self] in report($0) }
+    }
+    func report(_ note: String) {
+        if !note.isEmpty { print("PAGE " + note) }
         let b = psTimes(Array(pids.keys)), dt = CACurrentMediaTime() - t0, fps = Double(frames - f0) / dt
         var lines: [String] = [], appTotal = 0.0, ws = 0.0
         for (pid, name) in pids.sorted(by: { $0.key < $1.key }) {
@@ -434,6 +440,10 @@ case "webkit", "count", "stub":
     web.load(URLRequest(url: URL(string: url)!))
     win.contentView = web
     keep.append(web)
+    // `bench webkit <…/gl-diff.html?…>`: print the frame-by-frame comparison of WebGL and 2D at the end
+    if url.contains("gl-diff.html") {
+        meter.beforeReport = { done in web.evaluateJavaScript("JSON.stringify(window.DIFF)") { r, _ in done((r as? String) ?? "no DIFF") } }
+    }
 case "idle": // the window alone, nothing drawn: the floor WindowServer and the process sit on
     view.wantsLayer = true; view.layer?.backgroundColor = NSColor.systemTeal.cgColor
 default:

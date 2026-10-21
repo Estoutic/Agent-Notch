@@ -1,6 +1,7 @@
 # Drawing the agents' house without WebKit: what an active frame would cost
 
-Research note, October 2026. Nothing in the shipping wallpaper changed. Prototype code lives in
+Research note, October 2026. The shipping wallpaper is unchanged: option C below exists behind `?gl=1`, which the app
+does not pass yet. Prototype code lives in
 `Prototypes/NativeWallpaper/` and is not part of the Swift package or the app.
 
 ## Question
@@ -139,6 +140,77 @@ the fast path (no `Map` lookups per call, colours pre-parsed via the page's own 
 3. A **full Swift port (A)** is the only path to ≈25%. Of that, about 13 points are WindowServer's and stay with any
    60 fps full-screen surface. The port gains ~15–20 points over C, but costs 3–5 weeks and a large visual-regression
    risk. That trade is not worth it unless the wallpaper becomes a central feature.
+
+## Option C, built: `room/index.html?gl=1`
+
+Option C now exists behind a flag. `?gl=1` gives the screen canvas a WebGL2 context: the `glContext` section of
+`room/index.html`. Without the flag, the page draws exactly as before. The app still loads the page without the
+flag; turning it on is a one-line change to the URL in `RoomWallpaper.swift`.
+
+How it works:
+
+- **Batching.** The page keeps calling `fillRect`, `drawImage`, `fillStyle` and so on, unchanged. Every fill and image
+  becomes one instance of a quad in a frame-wide array. At the end of `frame()` the array is uploaded once
+  (`bufferData`) and drawn in runs that share a texture, a blend mode and a clip. That comes to ~160 draws a frame
+  instead of ~7 500 replayed canvas commands.
+- **Gradients.** Two-stop linear gradients, and radial gradients that share a centre, are computed in the fragment
+  shader. Any other gradient is painted once into a cached texture.
+- **Clips and path fills.** These go through the stencil buffer: window panes, the lighthouse beam, arcs.
+- **Offscreen canvases.** Bakes and backdrop layers stay 2D and become textures. A canvas is uploaded again only after
+  something drew on it; the patched 2D methods bump a version counter.
+- **Blend modes.** `source-over`, `lighter` and `multiply`, plus `globalAlpha`, map to blend states.
+
+**Pitfalls on the way, each measured:**
+
+1. **2D canvas read back each frame.** The first version painted clips and gradients with a real 2D canvas and
+   uploaded the result every frame. WebKit's GPU process then went to 160–230% CPU at 16–23 fps.
+2. **Many uploads into a buffer still in use.** The second version uploaded each run separately
+   (`bufferSubData`, ~200 times a frame). Even with the readbacks gone, that held the page at 30 fps.
+3. **The fix.** One upload a frame, gradients in the shader, and clips in the stencil buffer. That gives a steady 60 fps.
+
+**Picture check.** `Prototypes/NativeWallpaper/gl-diff.html` loads the page with its screen context replaced by a tee.
+Every call goes both to the WebGL context and to a hidden 2D canvas, and the two pictures are compared after each
+frame. Run it full-screen in WKWebView with `bench webkit …/gl-diff.html?<query>`. Results:
+
+- Six scenarios, ~400–700 frames each:
+  - night with snow and aurora
+  - rain, fog and the sea at dusk
+  - mountains on a busy daytime sky
+  - a cloudy sunrise
+  - the sea at night
+  - the party egg
+- About 0.003–0.01% of the pixels differ by more than 3/255. That is a few dozen device pixels per frame, at most ~0.06%.
+- The differing pixels are all on antialiased edges of slanted clips and path fills. The 2D canvas computes exact
+  coverage there, while WebGL uses 4× MSAA (without MSAA, about twice as many pixels differ).
+- Fills and images match to within 3/255.
+
+**Cost.** The real page with eight working agents, measured 30 s per run. Runs were interleaved and repeated:
+
+| run | 2D: app CPU (GPU proc + WebContent) | WebGL: app CPU (GPU proc + WebContent) | WindowServer 2D / WebGL | fps 2D / WebGL |
+|---|---|---|---|---|
+| 1 | 56.2% (39.1 + 15.5) | 33.1% (9.2 + 21.3) | 28.2% / 19.2% | 60 / 60 |
+| 2 | 67.9% (48.0 + 17.1) | 29.3% (10.4 + 15.5) | 24.3% / 22.9% | 59 / 58 |
+| 3 | 68.6% (48.4 + 17.4) | 26.7% (9.4 + 14.3) | 23.9% / 23.6% | 59 / 59 |
+
+Run 1's WebGL figure predates the JS fast paths, and its WindowServer figures are the clean ones. Runs 2 and 3 are
+after the fast paths. Rounds that something else disturbed are left out: in those, fps fell to ~40 in both modes and
+the idle WindowServer drifted between 6% and 24%.
+
+**Result:** the drawing processes go from **≈56–69% to ≈27–33%**, more than halving. WebKit's GPU process drops from
+~40–48% to ~9–10%. WebContent stays at about the same level (14–21%): the JS logic plus the batching.
+
+WindowServer is unchanged or a little lower. This machine was noisy, so I do not trust a WindowServer gain smaller than
+about 5 points; the reliable result is "no worse".
+
+In total CPU (drawing processes plus WindowServer above idle), the active wallpaper goes from about 75–80% to about
+45%. Smoothness is unchanged at 60 fps, and the look matches up to the antialiased edges noted above.
+
+Next steps, if this ships:
+
+1. Pass `gl=1` from `RoomWallpaper.swift`. If WebGL2 is missing, `glContext` returns `null` and the page falls back to
+   2D on its own.
+2. Watch it in the app for a day.
+3. Optionally, pack bakes into an atlas to cut the ~160 draws further, and trim the JS layer.
 
 ## Reproducing
 
