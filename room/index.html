@@ -893,8 +893,11 @@ const rooms = [], roomByKey = new Map();
 const roomAt = (tower, floor) => rooms.find(r => r.tower === tower && r.floor === floor);
 const hashStr = s => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
 let projectCount = 0;
+// A project's room waits ROOM_KEEP_MS for its agents to come back, then flies off and the rest close up
+// (?roomKeep=10 makes it 10 seconds to try it out). The next agent of that project builds it again, the same.
+const ROOM_KEEP_MS = (+Q.get('roomKeep') || 15 * 60) * 1000, ROOM_GO_MS = 900, ROOM_SLIDE_MS = 1100;
 function ensureRoom(key, name, themeId) {
-  if (roomByKey.has(key)) return roomByKey.get(key);
+  if (roomByKey.has(key)) { const r = roomByKey.get(key); if (r.dying) reviveRoom(r, performance.now()); return r; }
   const theme = THEMES[themeId || projectTheme(name)];
   const r = { key, name, theme, NX: theme.size[0], NY: theme.size[1], seed: hashStr(key) % 97, born: performance.now(), drop: 0, ox: 0, oy: 0, cache: null };
   r.label = document.createElement('div'); r.label.className = 'label'; r.label.textContent = theme.shared ? theme.name : name; document.body.appendChild(r.label);
@@ -902,6 +905,47 @@ function ensureRoom(key, name, themeId) {
   return r;
 }
 const shared = key => roomByKey.get('__' + key);
+// how far a room has come down when landing (0..1), or how far it still is from gone when leaving
+function roomShown(r, t) { return r.dying ? Math.max(0, 1 - (t - r.dying) / ROOM_GO_MS) : Math.min(1, Math.max(0, (t - r.born) / 900)); }
+// back before it was gone: it comes down again from where it had risen to
+function reviveRoom(r, t) { r.born = t - roomShown(r, t) * 900; r.dying = null; }
+function removeRoom(r) {
+  const was = new Map(rooms.map(q => [q, [q.wx + (q.slx || 0), q.wy + (q.sly || 0)]])), view = { base: VIEW.base, zoom: VIEW.zoom, at: VIEW.at.slice() };
+  rooms.splice(rooms.indexOf(r), 1); roomByKey.delete(r.key); r.label.remove();
+  if (PK.room === r) closePicker();
+  // its resident and whoever was leaving from it go with it; anyone else on it or on the way through starts over at home
+  const lost = new Set();
+  for (const sp of [...sprites.values()]) {
+    if (sp.homeRoom === r) { sprites.delete(sp.id); continue; }
+    const P = sp.onBridge?.pair;
+    if (sp.room !== r && sp.goal?.room !== r && sp.errand?.room !== r && !sp.path.some(n => n.r === r) && !(P && (P.a === r || P.b === r))) continue;
+    if (sp.errand?.room === r) sp.errand = null;
+    if (sp.goal?.room === r) sp.goal = null;
+    if (sp.room === r || P) { sp.onBridge = null; sp.room = sp.homeRoom; [sp.x, sp.y] = sp.homeRoom.theme.hub; sp.z = 0; sp.alpha = 0; }
+    sp.path = []; lost.add(sp);
+  }
+  layout(); rewalk();
+  for (const sp of lost) if (!sp.goal && sp.room) {
+    if (sp.agent) { const [room, cat] = placeFor(sp); setGoal(sp, pickSpot(sp, room, cat)); }
+    else setGoal(sp, { room: sp.homeRoom, cat: 'idle', i: -1, p: sp.homeRoom.theme.hub });
+  }
+  // the ones after it slide into their new places, and the view eases to the new size of the house
+  for (const q of rooms) { const o = was.get(q); if (o && (o[0] !== q.wx || o[1] !== q.wy)) q.slide = { dx: o[0] - q.wx, dy: o[1] - q.wy, u: 0 }; }
+  if (view.zoom === 1 && !CAM.glide && !CAM.follow && (view.base !== VIEW.base || view.at[0] !== VIEW.at[0] || view.at[1] !== VIEW.at[1])) {
+    VIEW.zoom = view.base / VIEW.base; VIEW.at = view.at; applyView(); glideTo(1, VIEW.home, ROOM_SLIDE_MS);
+  }
+}
+// where a sliding room is drawn: its offset from its new place shrinks to nothing. It goes by frame time, so a long
+// frame (new rooms' images being made) does not skip the move
+function stepSlides(t, dt) {
+  for (const r of rooms) {
+    if (!r.slide) continue;
+    const u = r.slide.u = Math.min(1, r.slide.u + dt / ROOM_SLIDE_MS), k = 1 - (u < .5 ? 4 * u * u * u : 1 - Math.pow(2 - 2 * u, 3) / 2);
+    const sx = Math.round(r.slide.dx * k), sy = Math.round(r.slide.dy * k);
+    r.ox += sx - (r.slx || 0); r.oy += sy - (r.sly || 0); r.slx = sx; r.sly = sy;
+    if (u >= 1) { r.slide = null; r.moved = t; }
+  }
+}
 
 // Tower 0 holds the bathroom, the kitchen and the first project; the roof sits on top of it.
 // LAYOUT: 'towers' (stacks side by side), 'steps' (each next stack higher, to the right), 'islands' (projects on islands around the main tower).
@@ -1119,7 +1163,7 @@ function applyView() {
   cv.style.width = (cv.width * PXD / DPR) + 'px'; cv.style.height = (cv.height * PXD / DPR) + 'px';
   const lift = Math.round((INSETS.top - INSETS.bottom) / 2 * DPR / PXD); // centred between the menu bar and the Dock
   const aside = Math.round(INSETS.right / 2 * DPR / PXD); // and left of the desktop icons
-  for (const r of rooms) { r.ox = Math.round(cv.width / 2 - aside + r.wx - VIEW.at[0]); r.oy = Math.round(cv.height / 2 + lift + r.wy - VIEW.at[1]); }
+  for (const r of rooms) { r.ox = Math.round(cv.width / 2 - aside + r.wx - VIEW.at[0]) + (r.slx || 0); r.oy = Math.round(cv.height / 2 + lift + r.wy - VIEW.at[1]) + (r.sly || 0); }
 }
 // x, y in CSS pixels of the page. The view eases toward where it is told to go (see stepCamera), so a pinch glides.
 function zoomAt(factor, x, y) {
@@ -1162,10 +1206,17 @@ function transitPoint(L, u, w = 0) {
   R = saved;
   return [p[0], p[1], L.len];
 }
+// a bridge or a stair shows up once its islands have landed or slid into place, and goes first when one of them leaves
+function linkShown(a, b, t) {
+  const calm = r => r.slide ? Infinity : Math.max(r.born || 0, (r.moved || 0) - 500);
+  let e = Math.min(1, Math.max(0, (t - Math.max(calm(a), calm(b)) - 700) / 500));
+  for (const r of [a, b]) if (r.dying) e = Math.min(e, Math.max(0, 1 - (t - r.dying) / 300));
+  return e;
+}
 function drawLink(L, t) {
   if (L.kind === 'stair') return drawStair(L, t);
   const f = worldFrame(); if (!f) return;
-  const born = Math.max(L.a.born || 0, L.b.born || 0), e = Math.min(1, Math.max(0, (t - born - 700) / 500)); // after a new island has landed
+  const e = linkShown(L.a, L.b, t);
   if (e <= 0) return;
   const saved = R; R = f; g.globalAlpha = e;
   const k = L.axis === 'x' ? 0 : 1, s0 = Math.min(L.A[k], L.B[k]), s1 = Math.max(L.A[k], L.B[k]), c = L.A[1 - k], z = L.z - SLAB;
@@ -1238,7 +1289,7 @@ function lanternPost(x, y, z, glows) { // like the bridges' lanterns
 const STAIR_LIFT = 30; // how high a raised stair's foot hangs off the ground: it stays in the gap and covers no room
 function drawStair(L, t) {
   const f = worldFrame(); if (!f) return;
-  const born = Math.max(L.lo.born || 0, L.hi.born || 0), e = Math.min(1, Math.max(0, (t - born - 700) / 500));
+  const e = linkShown(L.lo, L.hi, t);
   if (e <= 0) return;
   const saved = R; R = f; g.globalAlpha = e;
   const n = L.steps, W = .5, z0 = L.z0, rise = L.rise / n, run = L.len / n, top = z0 + L.rise;
@@ -2015,14 +2066,19 @@ function updateErrands(t) {
 
 // residents keep an empty room alive and visit the shared rooms now and then
 function updateResidents(t) {
-  for (const r of rooms) {
+  for (const r of [...rooms]) {
     if (r.theme.shared) continue;
     const busy = [...sprites.values()].some(s => s.kind === 'agent' && s.homeRoom === r && !s.leaving);
     r.quietSince = busy ? null : (r.quietSince ?? t);
+    if (busy && r.dying) reviveRoom(r, t);
+    if (!busy && !PV && !r.dying && r.key.startsWith('p:') && t - r.quietSince > ROOM_KEEP_MS) {
+      r.dying = t; r.inPlace = !!roomAt(r.tower, r.floor + 1); // a floor under others fades where it is instead of rising through them
+    }
+    if (r.dying && t - r.dying > ROOM_GO_MS) { removeRoom(r); continue; }
     const id = 'home:' + r.key; let h = sprites.get(id);
-    if (!h && !busy && t - r.quietSince > 2500) h = spawn(id, r, { kind: 'home', vendor: 'home', small: true, state: 'idle', next: t + 1500 });
+    if (!h && !busy && !r.dying && t - r.quietSince > 2500) h = spawn(id, r, { kind: 'home', vendor: 'home', small: true, state: 'idle', next: t + 1500 });
     if (!h) continue;
-    h.fade = busy ? 0 : 1;
+    h.fade = busy || r.dying ? 0 : 1;
     if (busy && h.alpha <= .01) { sprites.delete(id); continue; }
     if (!busy && !h.path.length && !h.errand && t > h.next) {
       const roll = Math.random();
@@ -3254,8 +3310,9 @@ function drawSeason(t) {
 
 // ---------- drawing a room ----------
 function drawRoom(r, t, d) {
-  const e = Math.min(1, Math.max(0, (t - r.born) / 900));
-  r.drop = Math.round(-Math.pow(1 - e, 3) * 70 * S);
+  const e = roomShown(r, t);
+  if (r.inPlace && !r.dying && e >= 1) r.inPlace = false;
+  r.drop = r.inPlace ? 0 : Math.round(-Math.pow(1 - e, 3) * 70 * S);
   const cache = buildCache(r);
   R = r;
   const here = [...sprites.values()].filter(s => s.room === r ? !onStairs(s, r) : s.room === YARD && r.key === '__bath' && !atFoot(s));
@@ -3587,7 +3644,7 @@ function signText(r) { return pfFit(r.theme.shared ? r.theme.name : r.name, 18);
 function drawSign(r, t) {
   r.signHit = null;
   if (PV && !PV.house) return;
-  const e = Math.min(1, Math.max(0, (t - r.born) / 900)), saved = R; R = r;
+  const e = roomShown(r, t), saved = R; R = r;
   g.globalAlpha = Math.min(1, e * 1.6);
   const img = signImage(signText(r), r.floor > 0);
   if (r.floor === 0) { // a sign on a post on the grass at the island's front corner
@@ -3703,7 +3760,7 @@ function houseAwake(t) {
   if (demo || mouse || CAM.glide || CAM.follow || PAR.x || PAR.y) return true;
   if (METEORS.list.length || SC.fireworks.length || SC.puffs.length || SC.papers.length || INFO.coins.length) return true;
   if (LIFT && LIFT.cabins.some(c => c.state !== 'idle')) return true;
-  if (links.some(L => L.turn) || rooms.some(r => t - r.born < 2500)) return true;
+  if (links.some(L => L.turn) || rooms.some(r => t - r.born < 2500 || r.dying || r.slide || t < (r.moved || 0) + 1500)) return true;
   for (const sp of sprites.values()) {
     if (sp.path.length || sp.onBridge || sp.fall || sp.hold || sp.fire) return true;
     if (sp.kind === 'agent' && (sp.agent?.state === 'working' || sp.state === 'working')) return true;
@@ -3738,7 +3795,7 @@ function frame(t) {
   vtime = speed === 1 && fixedHour === null ? Date.now() : vtime + dt * speed; // after a pause the clock is right at once
   const d = now(); setTime(d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600);
   g = main;
-  stepCamera(t, dt);
+  stepCamera(t, dt); stepSlides(t, dt);
   drawBackground(t, d);
   eggSky(t, d);
   if (SCENE === 'extra') drawIslets(t);
@@ -3849,8 +3906,10 @@ function configure(o) {
     }
   }
   if (!relayout) return;
-  layout();
-  // stacks and bridges may have moved: walkers on the way start over from where they are
+  layout(); rewalk();
+}
+// stacks and bridges may have moved: walkers on the way start over from where they are
+function rewalk() {
   for (const sp of sprites.values()) {
     if (sp.fall || sp.exit) continue;
     if (sp.onBridge) { const to = sp.goal?.room || sp.homeRoom; sp.onBridge = null; sp.room = to; [sp.x, sp.y] = to.theme.hub; sp.z = 0; }
@@ -3863,7 +3922,7 @@ const CAM = { glide: null, follow: null };
 const viewTarget = () => CAM.glide ? CAM.glide.to : CAM.follow || { zoom: VIEW.zoom, at: VIEW.at };
 function glideTo(zoom, at, ms = 420) {
   CAM.follow = null; CAM.touched = performance.now();
-  CAM.glide = { from: { zoom: VIEW.zoom, at: VIEW.at.slice() }, to: { zoom, at: at.slice() }, t0: performance.now(), ms };
+  CAM.glide = { from: { zoom: VIEW.zoom, at: VIEW.at.slice() }, to: { zoom, at: at.slice() }, ms };
   wake();
 }
 function followTo(zoom, at) { CAM.glide = null; CAM.follow = { zoom, at: at.slice() }; wake(); }
@@ -3880,7 +3939,7 @@ function stepCamera(t, dt) {
   stepHome(t);
   const lz = Math.log;
   if (CAM.glide) {
-    const G = CAM.glide, u = Math.min(1, Math.max(0, (t - G.t0) / G.ms)), e = u < .5 ? 4 * u * u * u : 1 - Math.pow(2 - 2 * u, 3) / 2;
+    const G = CAM.glide, u = G.u = Math.min(1, (G.u || 0) + dt / G.ms), e = u < .5 ? 4 * u * u * u : 1 - Math.pow(2 - 2 * u, 3) / 2;
     VIEW.zoom = Math.exp(lz(G.from.zoom) + (lz(G.to.zoom) - lz(G.from.zoom)) * e);
     VIEW.at = [G.from.at[0] + (G.to.at[0] - G.from.at[0]) * e, G.from.at[1] + (G.to.at[1] - G.from.at[1]) * e];
     if (u >= 1) { CAM.glide = null; VIEW.zoom = G.to.zoom; VIEW.at = G.to.zoom === 1 ? VIEW.home.slice() : G.to.at.slice(); }
